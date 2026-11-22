@@ -1,0 +1,5 @@
+{
+  "prompt": "fix the bug in math.js",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "Off-by-one in average(). A visible test exists and fails before the fix."
+}

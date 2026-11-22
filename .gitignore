@@ -2,3 +2,5 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+# Raw benchmark runs hold local paths and your plugin list. Publish only after scrubbing (#13).
+bench/results/

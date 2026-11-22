@@ -1,0 +1,1 @@
+{ "name": "bench-strings", "private": true, "scripts": { "test": "node --test" } }

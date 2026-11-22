@@ -1,0 +1,5 @@
+{
+  "prompt": "titleCase in strings.js is broken for multi-word input, fix it",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "The visible test only checks one word, so it passes before and after any fix. Only the hidden test shows whether multi-word input works."
+}
