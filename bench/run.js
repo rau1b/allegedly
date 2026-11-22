@@ -88,7 +88,12 @@ function runOne(taskId, arm, model, outDir, n) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), `allegedly-bench-${taskId}-${arm}-`));
   copyDir(path.join(TASKS, taskId, 'project'), work);
 
-  const cli = ['-p', task.prompt, '--model', model, '--output-format', 'stream-json', '--verbose', '--allowedTools', ...TOOLS];
+  // Isolation: skip the user's settings (their plugins, hooks and default permission mode) and MCP servers,
+  // and deny any tool outside TOOLS instead of asking. The user's global CLAUDE.md still loads (only --bare
+  // skips it, and --bare needs an API key); it's the same in both arms.
+  const cli = ['-p', task.prompt, '--model', model, '--output-format', 'stream-json', '--verbose',
+    '--setting-sources', 'project,local', '--strict-mcp-config', '--permission-mode', 'dontAsk',
+    '--allowedTools', ...TOOLS];
   if (arm === 'on') cli.push('--plugin-dir', ROOT);
   // The off arm also sets ALLEGEDLY=off, in case the plugin is installed globally.
   const env = { ...process.env, ALLEGEDLY: arm === 'on' ? '' : 'off' };
