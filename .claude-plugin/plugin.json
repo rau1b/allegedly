@@ -1,0 +1,8 @@
+{
+  "name": "allegedly",
+  "version": "0.1.0",
+  "description": "Claude can't say 'done' without receipts. Every success claim gets fresh proof or is marked allegedly.",
+  "author": { "name": "rau1b" },
+  "license": "MIT",
+  "keywords": ["verification", "receipts", "honesty", "stop-hook", "testing"]
+}

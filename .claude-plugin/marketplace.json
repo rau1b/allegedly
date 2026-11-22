@@ -1,0 +1,11 @@
+{
+  "name": "allegedly",
+  "owner": { "name": "rau1b" },
+  "plugins": [
+    {
+      "name": "allegedly",
+      "source": "./",
+      "description": "Claude can't say 'done' without receipts."
+    }
+  ]
+}
