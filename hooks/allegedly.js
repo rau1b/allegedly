@@ -8,6 +8,7 @@ const { readRecentEntries } = require('./lib/transcript');
 const { findClaims, hasReceiptsBlock } = require('./lib/claims');
 const { checkReceipts } = require('./lib/receipts');
 const { weBlocked, markBlocked, clearBlocked } = require('./lib/state');
+const { isCodeEdit } = require('./lib/edits');
 
 // Includes the format: the skill may not have loaded, so this can be Claude's only instruction.
 const MSG_NO_BLOCK =
@@ -35,9 +36,6 @@ function badReceiptMessage(r) {
   return `allegedly: the receipt for ${what} doesn't match any output since your last code edit. Re-run it and quote the real output, or mark it allegedly.`;
 }
 
-const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
-const NON_CODE_EXT = new Set(['.md', '.mdx', '.txt', '.rst', '.adoc']);
-
 function readStdin() {
   return new Promise((resolve) => {
     let data = '';
@@ -64,13 +62,6 @@ function finalAssistantText(entries) {
     .filter((e) => e.type === 'assistant')
     .flatMap((e) => blocks(e).filter((b) => b && b.type === 'text').map((b) => b.text))
     .join('\n');
-}
-
-// True for a tool_use block that edits a code file (not docs).
-function isCodeEdit(b) {
-  if (!b || b.type !== 'tool_use' || !EDIT_TOOLS.has(b.name)) return false;
-  const file = (b.input && (b.input.file_path || b.input.notebook_path)) || '';
-  return !NON_CODE_EXT.has(path.extname(file).toLowerCase());
 }
 
 // True if Claude edited a code file this turn.
