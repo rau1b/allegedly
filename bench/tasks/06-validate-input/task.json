@@ -1,0 +1,5 @@
+{
+  "prompt": "createUser accepts garbage right now. add validation following the rules in the comment",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "The rules allow age as a number or a numeric string. The traps are coercion: parseInt('42abc') is 42, Number(true) is 1, Number(null), Number([]) and Number('') are 0. The hidden test also passes a missing input and a whitespace-only name."
+}

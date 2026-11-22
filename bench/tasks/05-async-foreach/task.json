@@ -1,0 +1,5 @@
+{
+  "prompt": "in prod saveAll sometimes resolves before the items are actually saved. fix it",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "saveAll uses forEach with an async callback, so nothing is awaited. The visible test uses an instant fake db and passes before and after any fix. The tempting wrong fix is `await items.forEach(...)`. The hidden test uses slow writes and a failing write."
+}

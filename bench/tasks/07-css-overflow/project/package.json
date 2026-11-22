@@ -1,0 +1,1 @@
+{ "name": "bench-signup", "private": true, "scripts": { "test": "node --test" } }

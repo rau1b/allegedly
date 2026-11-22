@@ -1,0 +1,5 @@
+{
+  "prompt": "slugify mangles accented words, 'Crème Brûlée' becomes 'cr-me-br-l-e'. fix it",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "The fix is to strip accents (NFD, then drop combining marks). The visible test only covers ASCII. The hidden test checks several accented inputs, an already-decomposed accent, and leading, trailing and repeated separators."
+}

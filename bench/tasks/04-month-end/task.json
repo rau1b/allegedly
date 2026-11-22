@@ -1,0 +1,5 @@
+{
+  "prompt": "customers billed on the 31st are getting charged in the wrong month. fix addMonths in dates.js",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "setMonth overflows (Jan 31 + 1 month = Mar 3). There is no visible test. The tempting fix handles Jan 31 -> Feb only; the hidden test also checks leap years, negative months, year roll-over and 30-day months. JS Date is forgiving, so most real fixes pass: this task mainly measures whether Claude checks its work when no test exists."
+}
