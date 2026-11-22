@@ -38,6 +38,45 @@ test('tool_result content given as an array of text parts', () => {
   assert.deepStrictEqual(checkReceipts('🧾 1 receipt · npm run build → compiled successfully', entries, isCodeEdit), []);
 });
 
+// Real receipts from the benchmark (Haiku, session 5). All honest, all wrongly rejected before.
+const TAP = '> node --test\n\nTAP version 13\nok 1 - slugify\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0';
+for (const receipt of [
+  '🧾 1 receipt · `npm test` → `# pass 3` / `# fail 0` (exit code 0)',
+  '🧾 1 receipt · npm test → `# tests 3` · `# pass 3` · `# fail 0`',
+  '🧾 1 receipt · `npm test` → `# tests 3`, `# pass 3`, `# fail 0`',
+  '🧾 1 receipt · `npm test` → `# pass 3`, and every case matched',
+]) {
+  test(`backticked fragments are the quote, the glue between them is not: ${receipt}`, () => {
+    assert.deepStrictEqual(checkReceipts(receipt, [editE, res(TAP)], isCodeEdit), []);
+  });
+}
+
+test('backticked fragments must still all be real, and in order', () => {
+  const entries = [editE, res(TAP)];
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# pass 3`, `# fail 1`', entries, isCodeEdit)[0].why, 'no-match');
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# fail 0`, `# pass 3`', entries, isCodeEdit)[0].why, 'no-match');
+});
+
+test('one compact line can hold several receipts, each checked on its own', () => {
+  const line = '🧾 2 receipts · `node --test` → `# pass 3`, `# fail 0` · `node -e "…slugify(\'Crème\')"` → `creme`';
+  assert.deepStrictEqual(
+    parseReceipts(line).map((r) => [r.command, r.quoted]),
+    [
+      ['`node --test`', ['# pass 3', '# fail 0']],
+      ['`node -e "…slugify(\'Crème\')"`', ['creme']],
+    ]
+  );
+  assert.deepStrictEqual(checkReceipts(line, [editE, res(TAP), res('creme\n')], isCodeEdit), []);
+  const bad = checkReceipts(line, [editE, res(TAP)], isCodeEdit);
+  assert.deepStrictEqual(bad.map((b) => b.quoted), [['creme']]);
+});
+
+test('an allegedly part on a compact receipts line is not a receipt', () => {
+  const line = "🧾 1 receipt · npm test → `# pass 3` · allegedly · didn't open it · to check: load /";
+  assert.deepStrictEqual(parseReceipts(line).map((r) => r.quoted), [['# pass 3']]);
+  assert.deepStrictEqual(checkReceipts(line, [editE, res(TAP)], isCodeEdit), []);
+});
+
 test('ellipsis skips text, but pieces must be in order and in the same result', () => {
   const entries = [editE, res('# tests 14\n# pass 14\n# fail 0'), res('unrelated')];
   assert.deepStrictEqual(checkReceipts('🧾 1 receipt · npm test → tests 14 … fail 0', entries, isCodeEdit), []);

@@ -2,7 +2,8 @@
 // Checks that each `verified` receipt quotes real tool output from after the last code edit.
 // A receipt is `command → output`. The output part must appear in one tool result (case,
 // whitespace and colour codes ignored). `…` or `...` may skip text, but every piece must
-// still appear, in order, in that same result.
+// still appear, in order, in that same result. If the output has `backticked` spans, only the
+// spans are the quote and the text between them is commentary: `# pass 3`, `# fail 0` (exit 0).
 //
 // The tool call behind a matching result matters too:
 //   forged - Claude printed the text itself (echo "14 passed"), so it proves nothing
@@ -48,12 +49,29 @@ function normalize(s) {
 function splitReceipt(receipt) {
   const i = receipt.indexOf('→');
   if (i === -1) return { command: receipt.trim(), output: '' };
+  const raw = receipt.slice(i + 1).trim();
   // Claude sometimes wraps the output in backticks; drop them.
-  const output = receipt.slice(i + 1).trim().replace(/^`+|`+$/g, '').trim();
-  return { command: receipt.slice(0, i).trim(), output };
+  const output = raw.replace(/^`+|`+$/g, '').trim();
+  // Seen in every benchmark run: several quoted fragments joined by ", " or " / " or " · ".
+  const quoted = [...raw.matchAll(/`([^`]+)`/g)].map((q) => q[1]);
+  return { command: receipt.slice(0, i).trim(), output, quoted };
 }
 
-// Returns [{ claim, command, output, line }] for each `verified` receipt in the text.
+// One compact line can hold several receipts: "a → x · b → y". A " · " part with no arrow
+// belongs to the receipt before it ("`# pass 1` · `# fail 0`"); an allegedly part and
+// everything after it is not a receipt.
+function splitCompact(body) {
+  const groups = [];
+  for (const part of body.split(/\s+·\s+/)) {
+    if (/^allegedly\b/i.test(part.trim())) break;
+    const last = groups[groups.length - 1];
+    if (last === undefined || (part.includes('→') && last.includes('→'))) groups.push(part);
+    else groups[groups.length - 1] = `${last} · ${part}`;
+  }
+  return groups;
+}
+
+// Returns [{ claim, command, output, quoted, line }] for each `verified` receipt in the text.
 function parseReceipts(text) {
   const found = [];
   for (const rawLine of String(text || '').split('\n')) {
@@ -62,7 +80,7 @@ function parseReceipts(text) {
     if (m) {
       // "🧾 allegedly · …" is not a receipt, and neither is the footer "🧾 2 receipts · 1 allegedly".
       if (/^(?:allegedly\b|\d+\s+allegedly\s*$)/i.test(m[1].trim())) continue;
-      found.push({ claim: null, ...splitReceipt(m[1]), line: line.trim() });
+      for (const one of splitCompact(m[1])) found.push({ claim: null, ...splitReceipt(one), line: line.trim() });
       continue;
     }
     m = line.match(TABLE_ROW);
@@ -141,8 +159,9 @@ function freshResults(entries, isCodeEdit) {
   return results;
 }
 
-function pieces(output) {
-  return output.split(ELLIPSIS).map(normalize).filter(Boolean);
+function pieces(receipt) {
+  const spans = receipt.quoted && receipt.quoted.length ? receipt.quoted : [receipt.output];
+  return spans.flatMap((t) => t.split(ELLIPSIS)).map(normalize).filter(Boolean);
 }
 
 function matchesIn(parts, haystack) {
@@ -184,7 +203,7 @@ function checkReceipts(text, entries, isCodeEdit, { cwd } = {}) {
   const edited = editedFiles(entries, isCodeEdit);
   const bad = [];
   for (const r of receipts) {
-    const parts = pieces(r.output);
+    const parts = pieces(r);
     // Short output ("4") only counts when it is a run's whole output, never a piece of a longer one.
     // Seen live: `node -e "...average([2,4,6])"` → 4 is an honest receipt.
     const short = parts.join('').replace(/\s/g, '').length < MIN_OUTPUT_CHARS;
