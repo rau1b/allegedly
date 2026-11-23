@@ -221,3 +221,13 @@ test('block message shows the format and stays under 40 words', () => {
   assert.match(r.out.reason, /🧾 1 receipt · npm test → 14 passed/);
   assert.ok(r.out.reason.split(/\s+/).length < 40, `${r.out.reason.split(/\s+/).length} words`);
 });
+
+// Seen in the isolated benchmark (Haiku, task 07): told only "mark it allegedly", it invented
+// `· rendered at 375px: not run`. Every send-back must spell out the allegedly form.
+test('every send-back message spells out the allegedly form', () => {
+  const form = /allegedly · <claim> · to check: <step>/;
+  const noBlock = runHook([human('x'), edit('src/a.js'), result('ok'), say('Fixed it.')]);
+  assert.match(noBlock.out.reason, form);
+  const bad = runHook([human('x'), edit('src/a.js'), result('ok'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')]);
+  assert.match(bad.out.reason, form);
+});

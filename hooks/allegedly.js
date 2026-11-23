@@ -11,9 +11,12 @@ const { weBlocked, markBlocked, clearBlocked } = require('./lib/state');
 const { isCodeEdit } = require('./lib/edits');
 
 // Includes the format: the skill may not have loaded, so this can be Claude's only instruction.
+// The allegedly form is spelled out too: told only "or mark it allegedly", Haiku invented
+// its own (`· rendered at 375px: not run`, isolated benchmark run, 2026-11-23).
+const ALLEGEDLY_FORM = '`allegedly · <claim> · to check: <step>`';
 const MSG_NO_BLOCK =
-  'allegedly: you claimed something works but showed no receipts. End with a 🧾 block like ' +
-  "`🧾 1 receipt · npm test → 14 passed` quoting real output, or `🧾 allegedly · didn't run it · to check: <step>`.";
+  'allegedly: you claimed it works but showed no receipts. End with a 🧾 block quoting real output, like ' +
+  `\`🧾 1 receipt · npm test → 14 passed\`. Anything you couldn't run: ${ALLEGEDLY_FORM}.`;
 const MSG_SECOND_MISS = 'allegedly: Claude skipped receipts this turn, treat its claims as unverified';
 const MSG_SECOND_BAD = "allegedly: Claude's receipts didn't check out this turn, treat its claims as unverified";
 
@@ -21,19 +24,19 @@ const MSG_SECOND_BAD = "allegedly: Claude's receipts didn't check out this turn,
 function badReceiptMessage(r) {
   const what = r.claim ? `"${r.claim}"` : `"${r.command || r.line}"`;
   if (r.why === 'forged') {
-    return `allegedly: the receipt for ${what} quotes text you printed yourself. Run the real check and quote its output, or mark it allegedly.`;
+    return `allegedly: the receipt for ${what} quotes text you printed yourself. Run the real check and quote its output, or mark it ${ALLEGEDLY_FORM}.`;
   }
   if (r.why === 'weak') {
-    return `allegedly: the receipt for ${what} comes from reading or listing files, which doesn't prove it works. Run a test, build or request, or mark it allegedly.`;
+    return `allegedly: the receipt for ${what} comes from reading or listing files, which doesn't prove it works. Run a test, build or request, or mark it ${ALLEGEDLY_FORM}.`;
   }
   if (r.why === 'unrelated') {
     const names = (r.edited || []).slice(0, 2).map((f) => path.basename(f)).join(', ');
-    return `allegedly: the receipt for ${what} ran tests that don't touch what you edited (${names}). Run tests that cover it, or mark it allegedly.`;
+    return `allegedly: the receipt for ${what} ran tests that don't touch what you edited (${names}). Run tests that cover it, or mark it ${ALLEGEDLY_FORM}.`;
   }
   if (r.why === 'no-output') {
-    return `allegedly: the receipt for ${what} quotes no output. Write it as command → output line, copied from a real run, or mark it allegedly.`;
+    return `allegedly: the receipt for ${what} quotes no output. Write it as command → output line, copied from a real run, or mark it ${ALLEGEDLY_FORM}.`;
   }
-  return `allegedly: the receipt for ${what} doesn't match any output since your last code edit. Re-run it and quote the real output, or mark it allegedly.`;
+  return `allegedly: the receipt for ${what} doesn't match any output since your last code edit. Re-run it and quote the real output, or mark it ${ALLEGEDLY_FORM}.`;
 }
 
 function readStdin() {
