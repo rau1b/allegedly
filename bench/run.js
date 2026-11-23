@@ -21,7 +21,10 @@ const { isCodeEdit } = require('../hooks/lib/edits');
 
 const ROOT = path.join(__dirname, '..');
 const TASKS = path.join(__dirname, 'tasks');
-const TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test)', 'Bash(npm test:*)', 'Bash(node:*)'];
+// Read-only shell commands are allowed too: on task 04 (isolated run) `cd <dir> && find …` was denied,
+// and Haiku then decided Bash was off entirely. Same list in both arms.
+const READ_SHELL = ['cd', 'ls', 'find', 'cat', 'head', 'tail', 'wc', 'grep'].map((c) => `Bash(${c}:*)`);
+const TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test)', 'Bash(npm test:*)', 'Bash(node:*)', ...READ_SHELL];
 const TIMEOUT_MS = 5 * 60 * 1000;
 
 function args() {
