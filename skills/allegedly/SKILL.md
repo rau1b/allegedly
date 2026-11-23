@@ -11,7 +11,7 @@ Whenever your reply says your work succeeded ("fixed", "works", "tests pass", "d
 
 1. **A receipt is real output, quoted.** Copy the proving line from a tool run in this session. Never paraphrase it, never invent it, and never produce it with `echo`/`printf` or by printing a file you wrote yourself.
 2. **Fresh only.** The run must come after your last edit to the code it proves. If you edited after running it, run it again or mark the claim allegedly.
-3. **Relevant only.** The command must exercise the claim (the test, the build, a request to the endpoint). `ls` or `cat` proves nothing works.
+3. **Relevant only.** The command must exercise the claim (the test, the build, a request to the endpoint). `ls` or `cat` proves nothing works. If you only read files this turn, you have no receipts: use the allegedly line alone.
 4. **Verify when it's cheap.** If a test, build or run command exists and takes about a minute or less, run it. Don't mark the claim allegedly to skip the work.
 5. **Otherwise say allegedly.** Any claim you didn't verify gets `allegedly` plus one concrete step the user can take to check it. Never leave a claim out of the block.
 
