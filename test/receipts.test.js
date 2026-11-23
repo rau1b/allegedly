@@ -54,7 +54,9 @@ for (const receipt of [
 test('backticked fragments must still all be real, and in order', () => {
   const entries = [editE, res(TAP)];
   assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# pass 3`, `# fail 1`', entries, isCodeEdit)[0].why, 'no-match');
-  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# fail 0`, `# pass 3`', entries, isCodeEdit)[0].why, 'no-match');
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# tests 3`, `ok 1 - slugify`', entries, isCodeEdit)[0].why, 'no-match');
+  // Count spans alone are count phrases (decision 11): their order doesn't matter, their numbers do.
+  assert.deepStrictEqual(checkReceipts('🧾 1 receipt · npm test → `# fail 0`, `# pass 3`', entries, isCodeEdit), []);
 });
 
 test('one compact line can hold several receipts, each checked on its own', () => {
@@ -258,4 +260,48 @@ test('count phrases: only for outputs made only of counts; forgery and reads sti
   assert.strictEqual(check('npm test → 3 passed, all edge cases fine', [bash('t', 'npm test'), out('t', TAP03)])[0].why, 'no-match');
   assert.strictEqual(check(R03, [bash('t', 'echo "# pass 3" "# fail 0"'), out('t', '# pass 3 # fail 0')])[0].why, 'forged');
   assert.strictEqual(check(R03, [call('t', 'Read', { file_path: 'test-log.txt' }), out('t', TAP03)])[0].why, 'weak');
+});
+
+// 3-run Haiku benchmark, 2026-11-23 (bench/results/2026-11-23T02-23-43-392Z). Honest replies the hook rejected.
+const TAP1 = '> node --test\n\nok 1 - 10% off 200 is 180\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n';
+
+test('3-run: TAP count lines glued into one quote (tasks 02, 05, 08)', () => {
+  const run = (text) => [bash('t', 'npm test 2>&1'), out('t', text)];
+  assert.deepStrictEqual(check('npm test → # tests 1 · # pass 1 · # fail 0', run(TAP1)), []);
+  assert.deepStrictEqual(check('`node --test test/store.test.js` → `# pass 1, # fail 0`', run(TAP1)), []);
+  const list = '🧾 1 receipt\n- `node --test test/slug.test.js` → `# tests 1 · # pass 1 · # fail 0`';
+  assert.deepStrictEqual(checkReceipts(list, [editE, ...run(TAP1)], isCodeEdit), []);
+  // Every number must still match.
+  assert.strictEqual(check('npm test → # tests 1 · # pass 1 · # fail 0', run(TAP1.replace('# fail 0', '# fail 1'))).length, 1);
+  assert.strictEqual(check('npm test → # pass 1, # fail 0, all edge cases fine', run(TAP1)).length, 1);
+});
+
+test('3-run: backticks inside a prose aside are not part of the quote (task 01)', () => {
+  const r = '`npm test` → `# pass 1` · `# fail 0` (TAP output from `node --test`, run in the project directory)';
+  const tail = '# tests 1\n# suites 0\n# pass 1\n# fail 0\n'; // `| tail` cut off the "> node --test" line
+  assert.deepStrictEqual(check(r, [bash('t', 'npm test 2>&1 | tail -n 20'), out('t', tail)]), []);
+  assert.strictEqual(check(r, [bash('t', 'npm test'), out('t', tail.replace('# fail 0', '# fail 1'))]).length, 1);
+  // Parentheses inside a span are quoted text.
+  assert.deepStrictEqual(parseReceipts('🧾 1 receipt · npm test → `ok 1 - adds (2ms)`')[0].quoted, ['ok 1 - adds (2ms)']);
+  // An aside alone still gets checked.
+  assert.deepStrictEqual(parseReceipts('🧾 1 receipt · npm test → (it printed `# pass 1`)')[0].quoted, ['# pass 1']);
+});
+
+test('3-run: an arrowless bullet under a receipts header is a note (task 08)', () => {
+  const text = [
+    '🧾 3 receipts',
+    '- `node --test test/slug.test.js` → `# tests 1`, `# pass 1`, `# fail 0`',
+    '- The earlier `node --test test/` run failed only because Node treated the directory as a file.',
+  ].join('\n');
+  assert.strictEqual(parseReceipts(text).length, 1);
+  assert.deepStrictEqual(checkReceipts(text, [editE, bash('t', 'node --test test/slug.test.js'), out('t', TAP1)], isCodeEdit), []);
+  // Only notes, no receipts: still a receipt with no output.
+  assert.strictEqual(checkReceipts('🧾 2 receipts\n- I read the file.', [editE], isCodeEdit)[0].why, 'no-output');
+});
+
+test('3-run: "🧾 0 receipts · npm test not run" promises nothing (task 05)', () => {
+  assert.deepStrictEqual(parseReceipts('🧾 0 receipts · `npm test` not run (Bash denied)'), []);
+  assert.strictEqual(parseReceipts('🧾 0 receipts · npm test → # pass 1').length, 1);
+  assert.strictEqual(parseReceipts('🧾 1 receipt · `npm test` not run')[0].why, undefined);
+  assert.strictEqual(checkReceipts('🧾 1 receipt · `npm test` not run', [editE], isCodeEdit)[0].why, 'no-output');
 });

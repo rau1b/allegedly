@@ -14,7 +14,7 @@ const { touchesEdited } = require('./related');
 const MIN_OUTPUT_CHARS = 3; // "ok" alone proves too little to match on
 
 // Compact form: "🧾 1 receipt · npm test → 14 passed". The footer "🧾 2 receipts · 1 allegedly" has no arrow.
-const COMPACT = /🧾\s*\d+\s+receipts?\s*·\s*(.+)$/;
+const COMPACT = /🧾\s*(\d+)\s+receipts?\s*·\s*(.+)$/;
 // Table row: "  verified   Test passes   npm test auth → 14 passed". Columns are 2+ spaces apart.
 const TABLE_ROW = /^\s*verified\s{2,}(.+?)\s{2,}(.+)$/;
 
@@ -53,8 +53,32 @@ function splitReceipt(receipt) {
   // Claude sometimes wraps the output in backticks; drop them.
   const output = raw.replace(/^`+|`+$/g, '').trim();
   // Seen in every benchmark run: several quoted fragments joined by ", " or " / " or " · ".
-  const quoted = [...raw.matchAll(/`([^`]+)`/g)].map((q) => q[1]);
-  return { command: receipt.slice(0, i).trim(), output, quoted };
+  return { command: receipt.slice(0, i).trim(), output, quoted: quotedSpans(raw) };
+}
+
+// The `backticked` spans of a receipt's output, leaving out spans inside a (prose aside).
+// Seen in the 3-run benchmark (task 01): `# pass 1` · `# fail 0` (TAP output from `node --test`).
+// Parentheses inside a span, like `ok 1 (2ms)`, are part of the quote. If every span sits in
+// an aside, all of them count.
+function quotedSpans(raw) {
+  const all = [];
+  const outside = [];
+  let depth = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (c === '`') {
+      const end = raw.indexOf('`', i + 1);
+      if (end === -1) break;
+      if (end > i + 1) {
+        const span = raw.slice(i + 1, end);
+        all.push(span);
+        if (depth === 0) outside.push(span);
+      }
+      i = end;
+    } else if (c === '(') depth++;
+    else if (c === ')' && depth > 0) depth--;
+  }
+  return outside.length ? outside : all;
 }
 
 // One compact line can hold several receipts: "a → x · b → y". A " · " part with no arrow
@@ -113,8 +137,10 @@ function parseReceipts(text) {
     let m = line.match(COMPACT);
     if (m) {
       // "🧾 allegedly · …" is not a receipt, and neither is the footer "🧾 2 receipts · 1 allegedly".
-      if (/^(?:allegedly\b|\d+\s+allegedly\s*$)/i.test(m[1].trim())) continue;
-      const parts = splitCompact(m[1]);
+      if (/^(?:allegedly\b|\d+\s+allegedly\s*$)/i.test(m[2].trim())) continue;
+      let parts = splitCompact(m[2]);
+      // "🧾 0 receipts · `npm test` not run (Bash denied)" promises nothing; arrowless parts are notes.
+      if (Number(m[1]) === 0) parts = parts.filter((p) => p.includes('→'));
       const last = parts.pop();
       for (const one of parts) {
         const r = receipt(null, one, line);
@@ -134,6 +160,9 @@ function parseReceipts(text) {
         const b = lines[j].match(BULLET);
         if (!b) break;
         if (/^`?allegedly\b/i.test(b[1].trim())) continue;
+        // A bullet with no arrow is a note, not a receipt (3-run benchmark, task 08:
+        // "- The earlier `node --test test/` run failed only because …").
+        if (!b[1].includes('→')) continue;
         j = add(receipt(null, b[1], lines[j]), j);
       }
       // A header that promises receipts but lists none is a receipt with no output.
@@ -236,8 +265,9 @@ function matchesIn(parts, haystack) {
 // the run printed TAP `# pass 3` / `# fail 0` and the receipt said `3 passed, 0 failed`.
 // Only a receipt made entirely of count phrases gets this, and every number must match.
 const COUNT_WORDS = { passed: 'pass', passing: 'pass', pass: 'pass', failed: 'fail', failing: 'fail', fail: 'fail', skipped: 'skip', skip: 'skip', total: 'tests', tests: 'tests', test: 'tests' };
-const CLAIM_COUNT = /(\d+)\s+(passed|passing|failed|failing|skipped|total|tests?)\b/g;
-const CLAIM_ONLY = /^(?:tests?:\s*)?(?:\d+\s+(?:passed|passing|failed|failing|skipped|total|tests?)(?:\s*(?:,|;|\/|·|and)\s*|\s+|$))+\.?$/;
+// Also TAP's own lines glued into one quote: `# tests 3 · # pass 3 · # fail 0` (3-run benchmark, tasks 02, 05, 08).
+const CLAIM_COUNT = /(\d+)\s+(passed|passing|failed|failing|skipped|total|tests?)\b|#\s*(pass|fail|skipped|skip|tests)\s+(\d+)\b/g;
+const CLAIM_ONLY = /^(?:tests?:\s*)?(?:(?:\d+\s+(?:passed|passing|failed|failing|skipped|total|tests?)|#\s*(?:pass|fail|skipped|skip|tests)\s+\d+)(?:\s*(?:,|;|\/|·|and)\s*|\s+|$))+\.?$/;
 // TAP (`# pass 3`), pytest (`3 passed`), jest (`tests: 3 passed, 3 total`), mocha (`3 passing`).
 const RESULT_COUNT = /#\s*(pass|fail|skipped|tests)\s+(\d+)|(\d+)\s+(passed|passing|failed|failing|skipped|total)\b/g;
 
@@ -246,7 +276,10 @@ function countClaim(text) {
   const t = normalize(text);
   if (!CLAIM_ONLY.test(t)) return null;
   const counts = {};
-  for (const m of t.matchAll(CLAIM_COUNT)) counts[COUNT_WORDS[m[2]]] = Number(m[1]);
+  for (const m of t.matchAll(CLAIM_COUNT)) {
+    if (m[1]) counts[COUNT_WORDS[m[2]]] = Number(m[1]);
+    else counts[m[3] === 'skipped' ? 'skip' : m[3]] = Number(m[4]);
+  }
   return Object.keys(counts).length ? counts : null;
 }
 
