@@ -307,12 +307,16 @@ function countsMatch(claim, text) {
   return seen;
 }
 
-// Claude typed the receipt text into a command that prints it.
+// Claude typed the receipt text into a command that prints it. Forged when every quoted piece
+// is in the command, or a piece with a number in it is (echo "14 passed"). A script that prints
+// its own labels, console.log('time kept:', check()), isn't forged by the label alone: the
+// values next to it were computed (benchmark 04, s10).
 function isForged(parts, source, counts) {
   if (!source.command || !PRINTERS.test(source.command)) return false;
   const command = normalize(source.command);
   if (counts && countsMatch(counts, command)) return true;
-  return parts.some((p) => command.includes(p));
+  const typed = parts.filter((p) => command.includes(p));
+  return typed.length > 0 && (typed.length === parts.length || typed.some((p) => /\d/.test(p)));
 }
 
 // Paths of the code files edited this turn.

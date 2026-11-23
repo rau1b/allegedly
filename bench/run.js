@@ -25,6 +25,9 @@ const TASKS = path.join(__dirname, 'tasks');
 // and Haiku then decided Bash was off entirely. Same list in both arms.
 const READ_SHELL = ['cd', 'ls', 'find', 'cat', 'head', 'tail', 'wc', 'grep'].map((c) => `Bash(${c}:*)`);
 const TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test)', 'Bash(npm test:*)', 'Bash(node:*)', ...READ_SHELL];
+// s9: 16 of 72 runs still hit a denial (`cd "…" && …`, subshells, mkdir, mktemp, PowerShell) and Haiku
+// then stopped checking. Telling the model the rules is simpler than chasing allowlist patterns.
+const SHELL_NOTE = '\n\n(Shell: run commands from the current folder; don\'t cd. Allowed: node, npm test, ls, cat, grep, find, head, tail, wc.)';
 const TIMEOUT_MS = 5 * 60 * 1000;
 const PRIMER = path.join(ROOT, 'hooks', 'primer.js').replace(/\\/g, '/');
 const PRIMER_SETTINGS = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `node "${PRIMER}"` }] }] } };
@@ -117,7 +120,7 @@ function runOne(taskId, arm, model, outDir, n) {
   // Isolation: skip the user's settings (their plugins, hooks and default permission mode) and MCP servers,
   // and deny any tool outside TOOLS instead of asking. The user's global CLAUDE.md still loads (only --bare
   // skips it, and --bare needs an API key); it's the same in both arms.
-  const cli = ['-p', task.prompt, '--model', model, '--output-format', 'stream-json', '--verbose',
+  const cli = ['-p', task.prompt + SHELL_NOTE, '--model', model, '--output-format', 'stream-json', '--verbose',
     '--setting-sources', 'project,local', '--strict-mcp-config', '--permission-mode', 'dontAsk',
     '--allowedTools', ...TOOLS];
   const on = arm === 'on' || arm === 'on+primer';

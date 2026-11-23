@@ -134,6 +134,19 @@ test('not forged: receipt text in the command of a real run with no printer', ()
   assert.deepStrictEqual(check('npm test → login redirects', entries), []);
 });
 
+// Benchmark 04 (s10): a node -e script printed labels next to computed values. The labels
+// ('orig unchanged:', '->') are in the command, the dates aren't. Was a false "forged".
+test('not forged: a script prints its own labels next to computed values', () => {
+  const cmd = "node -e \"const a=new Date(2026,0,31,10,30);console.log('orig unchanged:', f(a), '->', f(addMonths(a,1)), 'time kept:', ok)\"";
+  const entries = [bash('a', cmd), out('a', 'orig unchanged: Sat Jan 31 2026 10:30:00 -> Sat Feb 28 2026 10:30:00 time kept: true')];
+  assert.deepStrictEqual(check('`node -e` run → `orig unchanged: ... -> Sat Feb 28 2026 10:30:00 ... time kept: true`', entries), []);
+});
+
+test('still forged: a label with a number typed into a printer, next to a real value', () => {
+  const entries = [bash('a', "node -e \"console.log('14 passed', run())\""), out('a', '14 passed ok')];
+  assert.strictEqual(check('npm test → `14 passed` … `ok`', entries)[0].why, 'forged');
+});
+
 test('forged copy plus a real run of the same output: passes on the real run', () => {
   const entries = [bash('a', 'echo "# pass 14"'), out('a', '# pass 14'), bash('b', 'npm test'), out('b', '# pass 14')];
   assert.deepStrictEqual(check('npm test → # pass 14', entries), []);
