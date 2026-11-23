@@ -1,0 +1,5 @@
+{
+  "prompt": "dates show up like 2026-3-5 instead of 2026-03-05. fix it",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "The same unpadded date formatting is written three different ways, in report.js, email.js and export.js. The visible test covers only report.js, so fixing one file turns it green. Searching for `getUTCMonth() + 1` finds all three."
+}

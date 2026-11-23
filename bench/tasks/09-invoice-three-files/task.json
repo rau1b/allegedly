@@ -1,0 +1,5 @@
+{
+  "prompt": "customers say invoice totals are sometimes off by a cent, and refund lines print garbage like -1.-50. fix it",
+  "check": "node --test \"hidden/*.test.js\"",
+  "about": "Three bugs in three files: parse.js floors float cents (19.99 -> 1998), discount.js floors instead of rounding, format.js breaks on negative cents. The visible test only catches the parse bug, so fixing parse.js alone turns it green. Math.abs on the remainder alone still prints -1.50 for -50."
+}

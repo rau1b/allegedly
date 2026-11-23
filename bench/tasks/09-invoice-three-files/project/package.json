@@ -1,0 +1,1 @@
+{ "name": "bench-invoice", "private": true, "scripts": { "test": "node --test" } }
