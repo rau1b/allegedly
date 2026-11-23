@@ -84,7 +84,8 @@ To turn allegedly off, set `ALLEGEDLY=off`. To drop only the three session-start
 ## Known limits
 
 - A receipt proves a command ran and printed that output. It doesn't prove your tests are good. allegedly does catch one common dodge: running a test for a different file than the one Claude changed. Whole-suite runs (`npm test`) are trusted as-is.
-- v0.1 doesn't track edits made through shell commands (sed, formatters, git checkout).
+- Skipped tests count as passing. If Claude marks a test `it.skip` and the suite prints a real pass, the receipt is accepted.
+- v0.1 only sees edits made with Claude's edit tools. A change made through a shell command (sed, a formatter, `git checkout`) doesn't count as an edit, so a receipt from before it can still pass.
 - English only for now.
 - If the hook itself hits an error (a missing or unreadable transcript, bad input), it steps aside and lets Claude finish. It never blocks you because of its own bug.
 
