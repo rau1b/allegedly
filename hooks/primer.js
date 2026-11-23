@@ -9,9 +9,9 @@
 // everything off; ALLEGEDLY_PRIMER=off turns off only this. Fails open like the Stop hook.
 
 const PRIMER = [
-  'allegedly is on. When you say code works, end with a 🧾 block quoting real output from a run after your last edit: `🧾 1 receipt · npm test → # pass 3`.',
-  'Reading or grepping a file is not a receipt. Only a run (test, build, script, request) counts.',
-  "Anything you couldn't run: `🧾 allegedly · <claim> · to check: <step>`.",
+  'allegedly is on. Before saying code works, run it after your last edit and end with a 🧾 line quoting the output: `🧾 1 receipt · npm test → # pass 3`.',
+  'Reading, grepping or listing files proves nothing. Only something you ran counts: a test, build, script or request.',
+  "If you couldn't run it, say so: `🧾 allegedly · <claim> · to check: <step>`.",
 ].join('\n');
 
 function isOff(value) {
