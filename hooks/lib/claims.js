@@ -43,7 +43,7 @@ const SKIP_CLAUSE = [
   /^(?:if|when|once|unless|after|before|whether)\b/, // conditional or about the past
   /\b(?:if|unless|as long as|provided that|whether|before|until)\b/, // advice like "should work if you..."
   /\bwithout\b(?!\s+(?:any\s+)?(?:errors?|issues?|problems?|warnings?|failures?))/, // "without claiming anything works"
-  /\b(?:not|never|no longer|cannot)\b|n't\b/, // negated: "doesn't work", "isn't fixed"
+  /\b(?:not|never|no longer|cannot|nothing|none|neither|nor)\b|n't\b/, // negated: "doesn't work", "nothing is fixed"
   /\bstill\s+(?:fails?|failing|broken|errors?)\b/,
 ];
 
@@ -68,7 +68,8 @@ function stripCode(text) {
       (line) =>
         !RECEIPTS_FOOTER.test(line) &&
         !/^\s*(?:verified|allegedly)\s{2,}/.test(line) &&
-        !/^\s*\|/.test(line) // markdown table rows
+        !/^\s*\|/.test(line) && // markdown table rows
+        !/^\s*>/.test(line) // blockquotes quote other text, like a draft (F3, s18)
     )
     .join('\n');
 }

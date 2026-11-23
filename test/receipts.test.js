@@ -355,3 +355,18 @@ test('3-run: "🧾 0 receipts · npm test not run" promises nothing (task 05)', 
   assert.strictEqual(parseReceipts('🧾 1 receipt · `npm test` not run')[0].why, undefined);
   assert.strictEqual(checkReceipts('🧾 1 receipt · `npm test` not run', [editE], isCodeEdit)[0].why, 'no-output');
 });
+
+// F2 (s18, live): the receipt text also sat in a file Claude had read (HANDOFF.md quoted it).
+// The literal hit in the Read result hid the real run, whose counts match, and it was called weak.
+test('F2: a literal hit in a read file does not hide a real run whose counts match', () => {
+  const TAP = '# tests 141\n# suites 0\n# pass 141\n# fail 0\n# cancelled 0\n';
+  const entries = [
+    call('r', 'Read', { file_path: 'HANDOFF.md' }),
+    out('r', 'receipt `npm test → # pass 141, # fail 0` got flagged'),
+    bash('t', 'cd "/x" && git status --short && npm test 2>&1 | tail -8'),
+    out('t', TAP),
+  ];
+  assert.deepStrictEqual(check('npm test → # pass 141, # fail 0', entries), []);
+  // With only the read, it is still weak.
+  assert.strictEqual(check('npm test → # pass 141, # fail 0', entries.slice(0, 2))[0].why, 'weak');
+});

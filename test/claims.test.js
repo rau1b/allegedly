@@ -115,3 +115,12 @@ test('receipts footer is recognised in both forms', () => {
   assert.strictEqual(hasReceiptsBlock("🧾 allegedly · didn't run it · to check: npm test"), true);
   assert.strictEqual(hasReceiptsBlock('All done ✅'), false);
 });
+
+// F3 (s18, live): quoting a launch-post draft in a > blockquote, and "nothing is fixed".
+test('F3: blockquoted text and "nothing/none" negations are not claims', () => {
+  assert.strictEqual(isClaim('It now reads:\n\n> **Claude fixed it… allegedly.**\n>\n> Claude kept telling me it was fixed.'), false);
+  assert.strictEqual(isClaim('Not done yet. We know what triggers the bug, but nothing is fixed.'), false);
+  assert.strictEqual(isClaim('None of the tests pass yet.'), false);
+  // A plain claim outside the quote still counts.
+  assert.strictEqual(isClaim('> the old note\n\nThe bug is fixed.'), true);
+});

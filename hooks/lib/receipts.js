@@ -359,8 +359,10 @@ function checkReceipts(text, entries, isCodeEdit, { cwd } = {}) {
       bad.push({ ...r, why: 'no-output' });
       continue;
     }
-    const counts = hits.length === 0 ? countClaim(whole) : null;
-    if (counts) hits = results.filter((res) => countsMatch(counts, res.text));
+    // Count phrases get a second look when no run matched word for word. F2 (s18, live): the
+    // receipt text also sat in a file Claude had read, and that hit hid the real test run.
+    const counts = hits.some((h) => h.source.kind === 'run') ? null : countClaim(whole);
+    if (counts) hits = [...new Set([...hits, ...results.filter((res) => countsMatch(counts, res.text))])];
     const real = hits.filter((h) => h.source.kind === 'run' && !isForged(parts, h.source, counts));
     // Nothing was run since the edit, only read or searched: "re-quote it" can't help, so say weak.
     // Seen in the isolated benchmark (task 07): a grep receipt with a mis-quoted span.
