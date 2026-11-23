@@ -214,7 +214,10 @@ function checkReceipts(text, entries, isCodeEdit, { cwd } = {}) {
       continue;
     }
     const real = hits.filter((h) => h.source.kind === 'run' && !isForged(parts, h.source));
-    if (hits.length === 0) bad.push({ ...r, why: 'no-match' });
+    // Nothing was run since the edit, only read or searched: "re-quote it" can't help, so say weak.
+    // Seen in the isolated benchmark (task 07): a grep receipt with a mis-quoted span.
+    const onlyReads = results.length > 0 && results.every((res) => res.source.kind === 'read');
+    if (hits.length === 0) bad.push({ ...r, why: onlyReads ? 'weak' : 'no-match' });
     else if (real.some((h) => touchesEdited(h.source.command, h.text, edited, cwd))) continue;
     else if (real.length > 0) bad.push({ ...r, why: 'unrelated', edited });
     else if (hits.some((h) => isForged(parts, h.source))) bad.push({ ...r, why: 'forged' });

@@ -137,6 +137,15 @@ test('forged copy plus a real run of the same output: passes on the real run', (
   assert.deepStrictEqual(check('npm test → # pass 14', entries), []);
 });
 
+// Isolated benchmark, task 07: Haiku quoted a grep and one span (`nowrap`) wasn't in it.
+// "Re-quote it" was the wrong advice: nothing had been run since the edit.
+test('no match when only reads happened since the edit: weak, not no-match', () => {
+  const grep = [call('a', 'Grep', { pattern: 'width' }), out('a', 'styles.css:16: width: 100%;')];
+  assert.strictEqual(check('grep → `16: width: 100%;` (no `nowrap`)', grep)[0].why, 'weak');
+  const ran = [...grep, bash('b', 'node check.js'), out('b', 'cta=16..359')];
+  assert.strictEqual(check('node check.js → cta=0..400', ran)[0].why, 'no-match');
+});
+
 test('weak: output only from ls, cat, git status or the Read tool', () => {
   assert.strictEqual(check('ls → app.js', [bash('a', 'ls src'), out('a', 'app.js\nutil.js')])[0].why, 'weak');
   assert.strictEqual(check('cat → 14 passed', [bash('a', 'cat test.log | tail -3'), out('a', '14 passed')])[0].why, 'weak');
