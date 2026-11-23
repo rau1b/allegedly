@@ -13,7 +13,7 @@
 
 Enforcement needs **Node 18+** (`node --version`). Without Node, the skill still works but nothing enforces it.
 
-<!-- TODO(rau1b): 10-second GIF here: install, then a first receipt -->
+![Install allegedly, then Claude fixes a bug and ends with a receipt](docs/demo.gif)
 
 ## What you get
 
