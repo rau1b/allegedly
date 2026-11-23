@@ -35,7 +35,7 @@ Small task? You get one line:
 
 ## Why it's different
 
-Other verification skills *ask* Claude nicely. allegedly **enforces** it: a hook checks Claude's final message every time it finishes. If Claude claims success with no receipts, or with stale ones from before its last edit, it gets sent back once to fix that. If it still skips them, you see a one-line notice. It never fails silently.
+Other verification skills *ask* Claude nicely. allegedly **enforces** it: a hook checks Claude's final message every time it finishes. If Claude claims success with no receipts, or with stale ones from before its last edit, it gets sent back once to fix that. If it still skips them, you see a one-line notice, so a missing receipt never slips by quietly.
 
 ## What allegedly reads
 
@@ -57,6 +57,7 @@ To turn allegedly off, set `ALLEGEDLY=off`. To drop only the three session-start
 - A receipt proves a command ran and printed that output. It doesn't prove your tests are good. allegedly does catch one common dodge: running a test for a different file than the one Claude changed. Whole-suite runs (`npm test`) are trusted as-is.
 - v0.1 doesn't track edits made through shell commands (sed, formatters, git checkout).
 - English only for now.
+- If the hook itself hits an error (a missing or unreadable transcript, bad input), it steps aside and lets Claude finish. It never blocks you because of its own bug.
 
 ## License
 

@@ -220,6 +220,19 @@ test('every receipt example in SKILL.md parses, with command and output', () => 
   }
 });
 
+// The README examples are the first thing users see. They must parse too.
+test('every receipt example in README.md parses, with command and output', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  const blocks = [...readme.matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1]).filter((b) => b.includes('🧾'));
+  const receipts = blocks.flatMap((b) => parseReceipts(b));
+  assert.ok(receipts.length >= 3, `found ${receipts.length}`);
+  for (const r of receipts) {
+    assert.ok(r.command && r.output.length >= 3, `bad example: ${r.line}`);
+  }
+});
+
 // Seen live (2026-11-23): a run printed exactly "4" and Claude quoted it. Honest, must pass.
 test('short output passes only when it is the whole output of a run', () => {
   const run = (out) => [
