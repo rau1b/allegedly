@@ -43,11 +43,14 @@ Other verification skills *ask* Claude nicely. allegedly **enforces** it: a hook
 - Sometimes one test file: when a receipt comes from a run of specific test files, it opens them (up to 256 KB each) to see whether they use the code Claude edited.
 - **Nothing leaves your machine.** The hook contains no network code at all, and a test enforces that.
 - It writes one thing: an empty marker file in your temp folder (`allegedly/<session id>.blocked`) while it has sent Claude back, so it never sends Claude back twice in one turn. No transcript text goes in it.
+- At session start, a second small hook adds three lines to Claude's context explaining the receipt format (about 60 tokens). With it, Claude gets the format right the first time much more often, so fewer replies are sent back.
 - The whole hook is a few short files in `hooks/`, readable in about ten minutes. It doesn't start other programs either.
 
 ## Headless and CI (`claude -p`, the Agent SDK)
 
 allegedly works the same way there: it sends Claude back once, so the receipts end up in your log. If Claude misses twice, the notice shows up as an info message in `--output-format stream-json`, but plain `-p` output may not show it. `--bare` runs skip plugin hooks, so allegedly doesn't run in them.
+
+To turn allegedly off, set `ALLEGEDLY=off`. To drop only the three session-start lines, set `ALLEGEDLY_PRIMER=off`.
 
 ## Known limits
 

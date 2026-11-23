@@ -147,6 +147,16 @@ test('still forged: a label with a number typed into a printer, next to a real v
   assert.strictEqual(check('npm test → `14 passed` … `ok`', entries)[0].why, 'forged');
 });
 
+test('a bare allegedly line with a to-check step counts as a receipts block (decision C)', () => {
+  const { hasReceiptsBlock, findClaims } = require('../hooks/lib/claims');
+  const line = 'allegedly · Feb 28 is returned for Jan 31 · to check: run `node -e` with new Date(2026,0,31)';
+  assert.ok(hasReceiptsBlock(`I changed addMonths.\n\n${line}`));
+  assert.ok(hasReceiptsBlock(`- ${line}`));
+  assert.deepStrictEqual(findClaims(line, { editedCode: true }), []); // the line itself isn't a claim
+  assert.ok(!hasReceiptsBlock('It is allegedly fixed · to check later')); // prose, no line start / no step
+  assert.ok(!hasReceiptsBlock('allegedly · it works')); // no to-check step
+});
+
 test('forged copy plus a real run of the same output: passes on the real run', () => {
   const entries = [bash('a', 'echo "# pass 14"'), out('a', '# pass 14'), bash('b', 'npm test'), out('b', '# pass 14')];
   assert.deepStrictEqual(check('npm test → # pass 14', entries), []);

@@ -29,8 +29,6 @@ const TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test)', 'Bash(
 // then stopped checking. Telling the model the rules is simpler than chasing allowlist patterns.
 const SHELL_NOTE = '\n\n(Shell: run commands from the current folder; don\'t cd. Allowed: node, npm test, ls, cat, grep, find, head, tail, wc.)';
 const TIMEOUT_MS = 5 * 60 * 1000;
-const PRIMER = path.join(ROOT, 'hooks', 'primer.js').replace(/\\/g, '/');
-const PRIMER_SETTINGS = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `node "${PRIMER}"` }] }] } };
 const ARM_NAMES = { off: 'without', on: 'with allegedly', 'on+primer': 'with allegedly + primer' };
 
 function args() {
@@ -125,10 +123,9 @@ function runOne(taskId, arm, model, outDir, n) {
     '--allowedTools', ...TOOLS];
   const on = arm === 'on' || arm === 'on+primer';
   if (on) cli.push('--plugin-dir', ROOT);
-  // The primer isn't in hooks.json yet (off by default), so this arm adds it as a SessionStart hook.
-  if (arm === 'on+primer') cli.push('--settings', JSON.stringify(PRIMER_SETTINGS));
+  // The primer ships in hooks.json (on by default since s10); the plain `on` arm switches it off.
   // The off arm also sets ALLEGEDLY=off, in case the plugin is installed globally.
-  const env = { ...process.env, ALLEGEDLY: on ? '' : 'off' };
+  const env = { ...process.env, ALLEGEDLY: on ? '' : 'off', ALLEGEDLY_PRIMER: arm === 'on' ? 'off' : '' };
   const res = spawnSync('claude', cli, { cwd: work, env, encoding: 'utf8', timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 });
   const raw = (res.stdout || '') + (res.stderr ? `\n${res.stderr}` : '');
   fs.writeFileSync(path.join(outDir, `${taskId}-${arm}-${n}.jsonl`), raw);

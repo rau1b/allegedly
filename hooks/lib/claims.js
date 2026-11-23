@@ -52,7 +52,9 @@ const GATED_PATTERNS = [
   /\bworks\b/,
 ];
 
-const RECEIPTS_FOOTER = /🧾\s*(?:\d+\s+receipts?\b|allegedly\b)/;
+// A bare `allegedly · <claim> · to check: <step>` line counts too (user decision C, s10): it's the
+// honest form, and Haiku wrote it without the 🧾 in the s9 benchmark (04, primer arm).
+const RECEIPTS_FOOTER = /🧾\s*(?:\d+\s+receipts?\b|allegedly\b)|^[\s>*\-•]*allegedly\s*·[^\n]*·\s*to check:/im;
 
 function stripCode(text) {
   return text
