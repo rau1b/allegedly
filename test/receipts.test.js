@@ -192,3 +192,35 @@ test('short output passes only when it is the whole output of a run', () => {
   assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → ok', run('# tests 3\nok 1 - a\n'), isCodeEdit)[0].why, 'no-output');
   assert.strictEqual(checkReceipts('🧾 1 receipt · node -e → 5', run('4\n'), isCodeEdit)[0].why, 'no-output');
 });
+
+// Isolated benchmark, 2026-11-23. Both are honest replies the parser used to misread.
+const TAP3 = 'TAP version 13\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n';
+
+test('task 01: output in a fenced block under the receipt line', () => {
+  const text = 'Fixed.\n\n🧾 1 receipt · `npm test` →\n```\n# tests 3\n# pass 3\n# fail 0\n```\n\nThe receipt covers the existing test only.';
+  const [r] = parseReceipts(text);
+  assert.deepStrictEqual(r.quoted, ['# tests 3', '# pass 3', '# fail 0']);
+  assert.deepStrictEqual(checkReceipts(text, [editE, res(TAP3)], isCodeEdit), []);
+  assert.strictEqual(checkReceipts(text, [editE, res('# tests 3\n# pass 2\n# fail 1')], isCodeEdit)[0].why, 'no-match');
+});
+
+test('task 08: receipts as a list under a header line', () => {
+  const text = [
+    '🧾 2 receipts',
+    '- `node --test` → `# tests 3`, `# pass 3`, `# fail 0`',
+    '- `node -e "...slugify(\'Crème Brûlée\')..."` → `"creme-brulee"`',
+    '',
+    'Not checked: letters with no decomposition.',
+  ].join('\n');
+  assert.strictEqual(parseReceipts(text).length, 2);
+  assert.deepStrictEqual(checkReceipts(text, [editE, res(TAP3), res('"creme-brulee"\n')], isCodeEdit), []);
+  assert.strictEqual(checkReceipts(text, [editE, res(TAP3)], isCodeEdit)[0].why, 'no-match');
+});
+
+test('a list may mix in allegedly items; a header with no list is a receipt with no output', () => {
+  const list = '🧾 1 receipt\n- npm test → # pass 3\n- allegedly · works on Safari · to check: open it in Safari';
+  assert.strictEqual(parseReceipts(list).length, 1);
+  const empty = parseReceipts('Done.\n\n🧾 2 receipts\n\nAll good.');
+  assert.strictEqual(empty.length, 1);
+  assert.strictEqual(checkReceipts('Done.\n\n🧾 2 receipts', [editE, res(TAP3)], isCodeEdit)[0].why, 'no-output');
+});

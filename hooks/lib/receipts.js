@@ -71,20 +71,78 @@ function splitCompact(body) {
   return groups;
 }
 
+// A header line alone, with the receipts as a list below it: "🧾 2 receipts" then "- npm test → …".
+const HEADER = /🧾\s*(\d+)\s+receipts?\s*$/;
+const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/;
+const FENCE = /^\s*```/;
+
+// A receipt that ends in "→" with its output in a fenced block on the next lines (seen in the
+// isolated benchmark, task 01). Each line of the block is a quoted span, in order.
+function fenceAfter(lines, i) {
+  let j = i + 1;
+  while (j < lines.length && lines[j].trim() === '') j++;
+  if (j >= lines.length || !FENCE.test(lines[j])) return null;
+  const body = [];
+  for (j += 1; j < lines.length && !FENCE.test(lines[j]); j++) if (lines[j].trim()) body.push(lines[j].trim());
+  return { quoted: body, output: body.join('\n'), end: j };
+}
+
+function withFence(receipt, lines, i) {
+  if (receipt.output !== '' || !/→\s*$/.test(receipt.raw)) return { receipt, end: i };
+  const f = fenceAfter(lines, i);
+  return f ? { receipt: { ...receipt, output: f.output, quoted: f.quoted }, end: f.end } : { receipt, end: i };
+}
+
+function receipt(claim, raw, line) {
+  const { command, output, quoted } = splitReceipt(raw);
+  return { claim, command, output, quoted, line: line.trim(), raw };
+}
+
 // Returns [{ claim, command, output, quoted, line }] for each `verified` receipt in the text.
 function parseReceipts(text) {
   const found = [];
-  for (const rawLine of String(text || '').split('\n')) {
-    const line = rawLine.replace(/\r$/, '');
+  const lines = String(text || '').split('\n').map((l) => l.replace(/\r$/, ''));
+  const add = (r, i) => {
+    const { receipt: done, end } = withFence(r, lines, i);
+    delete done.raw;
+    found.push(done);
+    return end;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     let m = line.match(COMPACT);
     if (m) {
       // "🧾 allegedly · …" is not a receipt, and neither is the footer "🧾 2 receipts · 1 allegedly".
       if (/^(?:allegedly\b|\d+\s+allegedly\s*$)/i.test(m[1].trim())) continue;
-      for (const one of splitCompact(m[1])) found.push({ claim: null, ...splitReceipt(one), line: line.trim() });
+      const parts = splitCompact(m[1]);
+      const last = parts.pop();
+      for (const one of parts) {
+        const r = receipt(null, one, line);
+        delete r.raw;
+        found.push(r);
+      }
+      if (last !== undefined) i = add(receipt(null, last, line), i); // only the last can own a fenced block
+      continue;
+    }
+    m = line.match(HEADER);
+    if (m) {
+      // Seen in the isolated benchmark (task 08): the hook found no receipts here and let it pass.
+      const before = found.length;
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() === '') j++;
+      for (; j < lines.length; j++) {
+        const b = lines[j].match(BULLET);
+        if (!b) break;
+        if (/^`?allegedly\b/i.test(b[1].trim())) continue;
+        j = add(receipt(null, b[1], lines[j]), j);
+      }
+      // A header that promises receipts but lists none is a receipt with no output.
+      if (found.length === before && Number(m[1]) > 0) found.push({ claim: null, command: '', output: '', quoted: [], line: line.trim() });
+      i = j - 1;
       continue;
     }
     m = line.match(TABLE_ROW);
-    if (m) found.push({ claim: m[1].trim(), ...splitReceipt(m[2]), line: line.trim() });
+    if (m) i = add(receipt(m[1].trim(), m[2], line), i);
   }
   return found;
 }
