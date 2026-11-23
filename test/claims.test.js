@@ -82,6 +82,22 @@ for (const sentence of MUST_TRIGGER) {
   test(`triggers: "${sentence}"`, () => assert.strictEqual(isClaim(sentence), true));
 }
 
+// F1 (s15 false alarm): "done"/"complete" about notes and docs is status talk, not a code claim.
+const DOC_STATUS = [
+  'HANDOFF.md is up to date.',
+  'The handoff is done.',
+  'The README is complete.',
+  'The launch post draft is done.',
+  'Your notes are now complete.',
+];
+for (const sentence of DOC_STATUS) {
+  test(`doc status is not a claim: "${sentence}"`, () => assert.strictEqual(isClaim(sentence, { editedCode: true }), false));
+}
+test('doc exemption does not hide code claims', () => {
+  assert.strictEqual(isClaim('The migration is done.'), true);
+  assert.strictEqual(isClaim('The README is complete and the build is done.'), true);
+});
+
 test('dodge: an action report counts only when code was edited', () => {
   assert.strictEqual(isClaim('Updated the handler.', { editedCode: true }), true);
   assert.strictEqual(isClaim("I've added retry logic to the client.", { editedCode: true }), true);

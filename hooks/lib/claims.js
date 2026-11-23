@@ -34,6 +34,8 @@ const NOT_CLAIMS = [
   /\bworking\s+on\b/g,
   /\b(?:a|some|any)\s+fixed\b/g, // "some fixed overhead"
   /\b(?:something|anything|nothing|what)\s+works\b/g,
+  // "The README is complete": status talk about notes and docs, not code (F1).
+  /\b(?:[\w-]+\.(?:md|txt|rst)|notes?|docs?|documentation|readme|handoff|changelog|plan|draft|post|summary|write-?up|tracker|memo|outline)\s+(?:is|are)\s+(?:now\s+)?(?:complete|done)\b/g,
 ];
 
 // A clause with any of these is not a success claim.
