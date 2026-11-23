@@ -232,10 +232,53 @@ function matchesIn(parts, haystack) {
   return true;
 }
 
+// Test counts said in other words (decision 11). Seen in the isolated benchmark (task 03):
+// the run printed TAP `# pass 3` / `# fail 0` and the receipt said `3 passed, 0 failed`.
+// Only a receipt made entirely of count phrases gets this, and every number must match.
+const COUNT_WORDS = { passed: 'pass', passing: 'pass', pass: 'pass', failed: 'fail', failing: 'fail', fail: 'fail', skipped: 'skip', skip: 'skip', total: 'tests', tests: 'tests', test: 'tests' };
+const CLAIM_COUNT = /(\d+)\s+(passed|passing|failed|failing|skipped|total|tests?)\b/g;
+const CLAIM_ONLY = /^(?:tests?:\s*)?(?:\d+\s+(?:passed|passing|failed|failing|skipped|total|tests?)(?:\s*(?:,|;|\/|·|and)\s*|\s+|$))+\.?$/;
+// TAP (`# pass 3`), pytest (`3 passed`), jest (`tests: 3 passed, 3 total`), mocha (`3 passing`).
+const RESULT_COUNT = /#\s*(pass|fail|skipped|tests)\s+(\d+)|(\d+)\s+(passed|passing|failed|failing|skipped|total)\b/g;
+
+// { pass: 3, fail: 0 } if the receipt output is only count phrases, else null.
+function countClaim(text) {
+  const t = normalize(text);
+  if (!CLAIM_ONLY.test(t)) return null;
+  const counts = {};
+  for (const m of t.matchAll(CLAIM_COUNT)) counts[COUNT_WORDS[m[2]]] = Number(m[1]);
+  return Object.keys(counts).length ? counts : null;
+}
+
+// The last count of each kind in a tool result: the summary comes at the end.
+function resultCounts(text) {
+  const counts = {};
+  for (const m of text.matchAll(RESULT_COUNT)) {
+    if (m[1]) counts[m[1] === 'skipped' ? 'skip' : m[1]] = Number(m[2]);
+    else counts[COUNT_WORDS[m[4]]] = Number(m[3]);
+  }
+  return counts;
+}
+
+// pytest and jest leave out zero counts ("3 passed in 0.1s"), so a claimed 0 may be missing,
+// but only when some other claimed count is really there.
+function countsMatch(claim, text) {
+  const got = resultCounts(text);
+  let seen = false;
+  for (const [kind, n] of Object.entries(claim)) {
+    if (got[kind] === undefined) {
+      if (n !== 0) return false;
+    } else if (got[kind] !== n) return false;
+    else seen = true;
+  }
+  return seen;
+}
+
 // Claude typed the receipt text into a command that prints it.
-function isForged(parts, source) {
+function isForged(parts, source, counts) {
   if (!source.command || !PRINTERS.test(source.command)) return false;
   const command = normalize(source.command);
+  if (counts && countsMatch(counts, command)) return true;
   return parts.some((p) => command.includes(p));
 }
 
@@ -266,22 +309,24 @@ function checkReceipts(text, entries, isCodeEdit, { cwd } = {}) {
     // Seen live: `node -e "...average([2,4,6])"` → 4 is an honest receipt.
     const short = parts.join('').replace(/\s/g, '').length < MIN_OUTPUT_CHARS;
     const whole = parts.join(' ');
-    const hits = results.filter((res) => (short ? whole !== '' && res.text === whole : matchesIn(parts, res.text)));
+    let hits = results.filter((res) => (short ? whole !== '' && res.text === whole : matchesIn(parts, res.text)));
     if (short && hits.length === 0) {
       bad.push({ ...r, why: 'no-output' });
       continue;
     }
-    const real = hits.filter((h) => h.source.kind === 'run' && !isForged(parts, h.source));
+    const counts = hits.length === 0 ? countClaim(whole) : null;
+    if (counts) hits = results.filter((res) => countsMatch(counts, res.text));
+    const real = hits.filter((h) => h.source.kind === 'run' && !isForged(parts, h.source, counts));
     // Nothing was run since the edit, only read or searched: "re-quote it" can't help, so say weak.
     // Seen in the isolated benchmark (task 07): a grep receipt with a mis-quoted span.
     const onlyReads = results.length > 0 && results.every((res) => res.source.kind === 'read');
     if (hits.length === 0) bad.push({ ...r, why: onlyReads ? 'weak' : 'no-match' });
     else if (real.some((h) => touchesEdited(h.source.command, h.text, edited, cwd))) continue;
     else if (real.length > 0) bad.push({ ...r, why: 'unrelated', edited });
-    else if (hits.some((h) => isForged(parts, h.source))) bad.push({ ...r, why: 'forged' });
+    else if (hits.some((h) => isForged(parts, h.source, counts))) bad.push({ ...r, why: 'forged' });
     else bad.push({ ...r, why: 'weak' });
   }
   return bad;
 }
 
-module.exports = { parseReceipts, checkReceipts, freshResults, isReadOnlyCommand, normalize, MIN_OUTPUT_CHARS };
+module.exports = { parseReceipts, checkReceipts, freshResults, isReadOnlyCommand, normalize, countClaim, resultCounts, MIN_OUTPUT_CHARS };

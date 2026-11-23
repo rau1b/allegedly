@@ -224,3 +224,38 @@ test('a list may mix in allegedly items; a header with no list is a receipt with
   assert.strictEqual(empty.length, 1);
   assert.strictEqual(checkReceipts('Done.\n\n🧾 2 receipts', [editE, res(TAP3)], isCodeEdit)[0].why, 'no-output');
 });
+
+// Decision 11. Task 03 of the isolated benchmark: the real run printed TAP, the receipt said it in words.
+const TAP03 = '  ---\n  duration_ms: 0.1266\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 75.4853\n';
+const R03 = '`node --test test/strings.test.js` → 3 passed, 0 failed';
+
+test('task 03: count phrases match TAP counts', () => {
+  assert.deepStrictEqual(check(R03, [bash('t', 'node --test test/strings.test.js 2>&1 | tail -n 12'), out('t', TAP03)]), []);
+  assert.deepStrictEqual(check('npm test → 3 tests, 3 passed', [bash('t', 'npm test'), out('t', TAP03)]), []);
+});
+
+test('count phrases: every number must match, and only fresh runs count', () => {
+  const run = (text) => [bash('t', 'node --test'), out('t', text)];
+  assert.strictEqual(check(R03, run(TAP03.replace('# pass 3', '# pass 2')))[0].why, 'no-match');
+  assert.strictEqual(check(R03, run(TAP03.replace('# fail 0', '# fail 1')))[0].why, 'no-match');
+  assert.strictEqual(check('npm test → 4 passed', run(TAP03))[0].why, 'no-match');
+  // A stale run from before the edit proves nothing.
+  const stale = checkReceipts(`🧾 1 receipt · ${R03}`, [bash('t', 'node --test'), out('t', TAP03), editE], isCodeEdit);
+  assert.strictEqual(stale[0].why, 'no-match');
+});
+
+test('count phrases match pytest, jest and mocha summaries', () => {
+  const run = (text) => [bash('t', 'npm test'), out('t', text)];
+  assert.deepStrictEqual(check('pytest → 3 passed, 0 failed', run('==== 3 passed in 0.04s ====')), []);
+  assert.strictEqual(check('pytest → 3 passed, 0 failed', run('==== 1 failed, 3 passed in 0.04s ====')).length, 1);
+  assert.deepStrictEqual(check('npx jest → Tests: 3 passed, 3 total', run('Tests:       3 passed, 3 total\nTime: 1.2 s')), []);
+  assert.deepStrictEqual(check('npx mocha → 3 passed', run('  3 passing (12ms)')), []);
+  // A lone zero proves nothing: some other count must really be there.
+  assert.strictEqual(check('npm test → 0 failed', run('done in 1s')).length, 1);
+});
+
+test('count phrases: only for outputs made only of counts; forgery and reads still caught', () => {
+  assert.strictEqual(check('npm test → 3 passed, all edge cases fine', [bash('t', 'npm test'), out('t', TAP03)])[0].why, 'no-match');
+  assert.strictEqual(check(R03, [bash('t', 'echo "# pass 3" "# fail 0"'), out('t', '# pass 3 # fail 0')])[0].why, 'forged');
+  assert.strictEqual(check(R03, [call('t', 'Read', { file_path: 'test-log.txt' }), out('t', TAP03)])[0].why, 'weak');
+});
