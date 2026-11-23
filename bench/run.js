@@ -26,6 +26,9 @@ const TASKS = path.join(__dirname, 'tasks');
 const READ_SHELL = ['cd', 'ls', 'find', 'cat', 'head', 'tail', 'wc', 'grep'].map((c) => `Bash(${c}:*)`);
 const TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test)', 'Bash(npm test:*)', 'Bash(node:*)', ...READ_SHELL];
 const TIMEOUT_MS = 5 * 60 * 1000;
+const PRIMER = path.join(ROOT, 'hooks', 'primer.js').replace(/\\/g, '/');
+const PRIMER_SETTINGS = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `node "${PRIMER}"` }] }] } };
+const ARM_NAMES = { off: 'without', on: 'with allegedly', 'on+primer': 'with allegedly + primer' };
 
 function args() {
   const a = { model: 'haiku', runs: 1, tasks: null, arms: ['off', 'on'], rescore: null };
@@ -117,9 +120,12 @@ function runOne(taskId, arm, model, outDir, n) {
   const cli = ['-p', task.prompt, '--model', model, '--output-format', 'stream-json', '--verbose',
     '--setting-sources', 'project,local', '--strict-mcp-config', '--permission-mode', 'dontAsk',
     '--allowedTools', ...TOOLS];
-  if (arm === 'on') cli.push('--plugin-dir', ROOT);
+  const on = arm === 'on' || arm === 'on+primer';
+  if (on) cli.push('--plugin-dir', ROOT);
+  // The primer isn't in hooks.json yet (off by default), so this arm adds it as a SessionStart hook.
+  if (arm === 'on+primer') cli.push('--settings', JSON.stringify(PRIMER_SETTINGS));
   // The off arm also sets ALLEGEDLY=off, in case the plugin is installed globally.
-  const env = { ...process.env, ALLEGEDLY: arm === 'on' ? '' : 'off' };
+  const env = { ...process.env, ALLEGEDLY: on ? '' : 'off' };
   const res = spawnSync('claude', cli, { cwd: work, env, encoding: 'utf8', timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 });
   const raw = (res.stdout || '') + (res.stderr ? `\n${res.stderr}` : '');
   fs.writeFileSync(path.join(outDir, `${taskId}-${arm}-${n}.jsonl`), raw);
@@ -143,11 +149,11 @@ function pctOf(rows, key, of) {
 
 function summary(rows) {
   const lines = ['| Arm | Runs | **Proof rate** | Hidden test passes | Claimed done | **Fake done** | Ran tests | Edited tests | Avg cost $ | Avg output tokens |', '|---|---|---|---|---|---|---|---|---|---|'];
-  for (const arm of ['off', 'on']) {
+  for (const arm of Object.keys(ARM_NAMES)) {
     const r = rows.filter((x) => x.arm === arm);
     if (!r.length) continue;
     const avg = (k) => (r.reduce((t, x) => t + (x[k] || 0), 0) / r.length).toFixed(k === 'costUsd' ? 4 : 0);
-    lines.push(`| ${arm === 'on' ? 'with allegedly' : 'without'} | ${r.length} | **${pctOf(r, 'proofShown', 'claimedAny')}** | ${pct(r, 'hiddenPass')} | ${pct(r, 'claimedDone')} | **${pct(r, 'fakeDone')}** | ${pct(r, 'ranTests')} | ${pct(r, 'editedTests')} | ${avg('costUsd')} | ${avg('outputTokens')} |`);
+    lines.push(`| ${ARM_NAMES[arm]} | ${r.length} | **${pctOf(r, 'proofShown', 'claimedAny')}** | ${pct(r, 'hiddenPass')} | ${pct(r, 'claimedDone')} | **${pct(r, 'fakeDone')}** | ${pct(r, 'ranTests')} | ${pct(r, 'editedTests')} | ${avg('costUsd')} | ${avg('outputTokens')} |`);
   }
   return lines.join('\n');
 }
