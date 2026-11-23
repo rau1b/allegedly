@@ -117,6 +117,11 @@ function withFence(receipt, lines, i) {
   return f ? { receipt: { ...receipt, output: f.output, quoted: f.quoted }, end: f.end } : { receipt, end: i };
 }
 
+// True when position `at` of the line sits inside an inline `code span` (odd number of backticks before it).
+function inCodeSpan(line, at) {
+  return (line.slice(0, at).match(/`/g) || []).length % 2 === 1;
+}
+
 function receipt(claim, raw, line) {
   const { command, output, quoted } = splitReceipt(raw);
   return { claim, command, output, quoted, line: line.trim(), raw };
@@ -135,6 +140,9 @@ function parseReceipts(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     let m = line.match(COMPACT);
+    // A receipt quoted inside `backticks` is an example, not a receipt. Seen live (s11): prose
+    // saying "its reply ended with `🧾 1 receipt · npm test → # pass 1`." was flagged no-match.
+    if (m && inCodeSpan(line, m.index)) continue;
     if (m) {
       // "🧾 allegedly · …" is not a receipt, and neither is the footer "🧾 2 receipts · 1 allegedly".
       if (/^(?:allegedly\b|\d+\s+allegedly\s*$)/i.test(m[2].trim())) continue;

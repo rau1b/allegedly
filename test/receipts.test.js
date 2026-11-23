@@ -38,6 +38,20 @@ test('tool_result content given as an array of text parts', () => {
   assert.deepStrictEqual(checkReceipts('🧾 1 receipt · npm run build → compiled successfully', entries, isCodeEdit), []);
 });
 
+// Seen live (s11): a receipt quoted in prose was parsed as a real one and flagged no-match.
+test('a receipt quoted inside backticks is an example, not a receipt', () => {
+  const tap = '# tests 1\n# pass 1\n# fail 0';
+  const text = [
+    '- **Bug fixed:** Haiku changed `i = 1` to `i = 0`, and its reply ended with `🧾 1 receipt · npm test → # pass 1`.',
+    "🧾 2 receipts · sandbox `npm test` after Haiku's fix → `# pass 1` / `# fail 0` · hook replay → `hook exit=0`",
+  ].join('\n');
+  assert.deepStrictEqual(parseReceipts(text).map((r) => r.command), ["sandbox `npm test` after Haiku's fix", 'hook replay']);
+  const entries = [editE, res(tap), res('hook exit=0')];
+  assert.deepStrictEqual(checkReceipts(text, entries, isCodeEdit), []);
+  // The real receipt is still checked: a wrong count is caught.
+  assert.strictEqual(checkReceipts(text.replace('`# pass 1` / `# fail 0`', '`# pass 2`'), entries, isCodeEdit)[0].why, 'no-match');
+});
+
 // Real receipts from the benchmark (Haiku, session 5). All honest, all wrongly rejected before.
 const TAP = '> node --test\n\nTAP version 13\nok 1 - slugify\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0';
 for (const receipt of [
