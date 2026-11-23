@@ -37,6 +37,35 @@ Small task? You get one line:
 
 Other verification skills *ask* Claude nicely. allegedly **enforces** it: a hook checks Claude's final message every time it finishes. If Claude claims success with no receipts, or with stale ones from before its last edit, it gets sent back once to fix that. If it still skips them, you see a one-line notice, so a missing receipt never slips by quietly.
 
+## Does it work?
+
+We ran Claude Code on 8 small bug-fix tasks, with and without allegedly. Haiku ran each task three times in three setups: without allegedly, with the hook alone, and with the hook plus the session-start lines (the default install). Sonnet ran each task once, without and with the default install.
+
+**Proof rate** is the share of "it works" replies you can check yourself: every receipt matches real output from after the last edit, or the reply says what's unproven and how to check it.
+
+| Model | Without | Hook only | Default install | Extra cost |
+|---|---|---|---|---|
+| Haiku (72 runs) | 0% | 75% | **100%** | +34% |
+| Sonnet (16 runs) | 0% | — | **100%** | +13% |
+
+Sonnet skipped the hook-only setup to save cost; the default install is what you get.
+
+Other things that changed with the default install (Haiku):
+
+- Claude ran the tests before saying done in 92% of runs, up from 63%.
+- It added or updated a test in 63% of runs, up from 33%.
+- It got sent back for a missing receipt in 7 of 24 runs. With the hook alone, it got sent back in all 24.
+
+On these 8 tasks, Claude fixed the bug in every run in every setup and never claimed a fix that a hidden test then failed. They don't trick current models into false "done" claims, so allegedly's job here is making the claim checkable, not making Claude smarter. In three extra tasks run once each, Sonnet without allegedly once said "the test suite passes" after fixing one of three copies of a bug; the hidden test failed. With allegedly, it fixed all three. One run proves little, but it's the failure allegedly exists for.
+
+### How we ran it
+
+- Each task is a tiny project with a hidden test Claude never sees. The runner scores each reply with the hook's own receipt checker.
+- Runs are isolated from your own setup: `claude -p --setting-sources project,local --strict-mcp-config --permission-mode dontAsk`. One thing leaks through: the runner's global `CLAUDE.md` loads in every setup alike.
+- Each prompt says which shell is in use, so Claude doesn't waste turns on denied commands.
+- Haiku numbers come from an earlier wording of the session-start lines. The Sonnet run uses the current wording.
+- Run it yourself: `node bench/run.js --model haiku --runs 3`. Raw runs, with local paths and plugin lists removed by `bench/scrub.js`: `bench/published/`.
+
 ## What allegedly reads
 
 - Your current session's transcript, on your machine, and only from your last message onward.
