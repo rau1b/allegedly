@@ -54,6 +54,33 @@ const GATED_PATTERNS = [
   /\bworks\b/,
 ];
 
+// Success claims in Spanish, Portuguese, French and German. \b is ASCII-only in JS, so words are
+// bounded with \p{L} lookarounds (corrigée, gelöst). Each language brings its own negations.
+const W = (body) => new RegExp(`(?<!\\p{L})(?:${body})(?!\\p{L})`, 'u');
+const ANY_WORDS = String.raw`(?: \p{L}+){0,3}`; // "las pruebas ya pasan", "die Tests laufen jetzt durch"
+const OTHER_CLAIMS = [
+  W('arreglad[oa]s?|corregid[oa]s?|solucionad[oa]s?|resuelt[oa]s?|funciona(?:n)?'), // es
+  W(`(?:pruebas|tests?)${ANY_WORDS} pasan`),
+  W(`corrigid[oa]s?|consertad[oa]s?|resolvid[oa]s?|funcionam|testes${ANY_WORDS} passa(?:m|ram)`), // pt
+  W(`corrigée?s?|réparée?s?|résolue?s?|fonctionne(?:nt)?|tests?${ANY_WORDS} passent`), // fr
+  W(`behoben|repariert|gelöst|korrigiert|funktioniert|tests?${ANY_WORDS} (?:laufen durch|bestehen|sind grün)`), // de
+];
+// Negations, and "if"/"when" (advice, not a claim), in those four languages.
+const OTHER_NEGATIONS = W(String.raw`no|nunca|ningún|ninguna|todavía no|aún no|não|nao|nem|ne|pas|jamais|nicht|kein\p{L}*|nie|niemals|si|se|wenn|falls|quand|cuando|quando`);
+
+// Common English words. A reply of 8+ words with few of them is in another language.
+const ENGLISH = new Set(('the a an and or but so to of in on at by from for with into as is are was were be been being it its this that these those there here i you we they my your our have has had do does did not no now then than all also only just one if can will would should could what which when how because since about up out more any each tests test passes passed works fixed added updated changed file files code run ran').split(' '));
+
+function looksEnglish(text) {
+  // Mostly non-Latin letters (Japanese, Chinese, Russian, Hindi …): not English, however few "words".
+  const letters = text.match(/\p{L}/gu) || [];
+  const latin = text.match(/\p{Script=Latin}/gu) || [];
+  if (letters.length >= 10 && latin.length / letters.length < 0.5) return false;
+  const words = text.toLowerCase().match(/\p{L}+/gu) || [];
+  if (words.length < 8) return true; // too short to tell
+  return words.filter((w) => ENGLISH.has(w)).length / words.length >= 0.12;
+}
+
 // A bare `allegedly · <claim> · to check: <step>` line counts too (user decision C, s10): it's the
 // honest form, and Haiku wrote it without the 🧾 in the s9 benchmark (04, primer arm).
 const RECEIPTS_FOOTER = /🧾\s*(?:\d+\s+receipts?\b|allegedly\b)|^[\s>*\-•]*allegedly\s*·[^\n]*·\s*to check:/im;
@@ -96,7 +123,11 @@ function clauses(sentence) {
 // Returns the clauses that claim success, as [{ text, kind }] with kind 'claim' or 'gated'.
 function findClaims(text, { editedCode = false } = {}) {
   const found = [];
-  for (const sentence of sentences(stripCode(String(text || '')))) {
+  const prose = stripCode(String(text || ''));
+  // Another language after a code edit: we can't read every language's claims, so ask for a 🧾 block.
+  // The worst case is one send-back answered with an allegedly line.
+  const foreign = !looksEnglish(prose);
+  for (const sentence of sentences(prose)) {
     if (/\?\s*$/.test(sentence)) continue; // questions don't claim anything
     for (const clause of clauses(sentence)) {
       const lower = clause.toLowerCase().replace(/[’]/g, "'");
@@ -105,6 +136,8 @@ function findClaims(text, { editedCode = false } = {}) {
       for (const re of NOT_CLAIMS) cleaned = cleaned.replace(re, ' ');
       const plain = cleaned.replace(/[.!,:;]+\s*$/, '').trim();
       if (CLAIM_PATTERNS.some((re) => re.test(plain))) found.push({ text: clause, kind: 'claim' });
+      else if (OTHER_CLAIMS.some((re) => re.test(plain)) && !OTHER_NEGATIONS.test(plain)) found.push({ text: clause, kind: 'claim' });
+      else if (editedCode && foreign) found.push({ text: clause, kind: 'gated' });
       else if (editedCode && GATED_PATTERNS.some((re) => re.test(plain))) found.push({ text: clause, kind: 'gated' });
     }
   }
@@ -115,4 +148,4 @@ function hasReceiptsBlock(text) {
   return RECEIPTS_FOOTER.test(String(text || ''));
 }
 
-module.exports = { findClaims, hasReceiptsBlock };
+module.exports = { findClaims, hasReceiptsBlock, looksEnglish };

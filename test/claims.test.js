@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { findClaims, hasReceiptsBlock } = require('../hooks/lib/claims');
+const { findClaims, hasReceiptsBlock, looksEnglish } = require('../hooks/lib/claims');
 
 const isClaim = (text, opts) => findClaims(text, opts).length > 0;
 
@@ -123,4 +123,28 @@ test('F3: blockquoted text and "nothing/none" negations are not claims', () => {
   assert.strictEqual(isClaim('None of the tests pass yet.'), false);
   // A plain claim outside the quote still counts.
   assert.strictEqual(isClaim('> the old note\n\nThe bug is fixed.'), true);
+});
+
+test('claims in Spanish, Portuguese, French and German; their negations and "if" are not claims', () => {
+  const claims = (t, o) => findClaims(t, o).map((c) => c.kind);
+  assert.deepStrictEqual(claims('Listo, el error está arreglado.'), ['claim']);
+  assert.deepStrictEqual(claims('Agora os testes passam.'), ['claim']);
+  assert.deepStrictEqual(claims('Le bug est corrigé.'), ['claim']);
+  assert.deepStrictEqual(claims('Der Fehler ist behoben.'), ['claim']);
+  assert.deepStrictEqual(claims('Las pruebas ya pasan.'), ['claim']);
+  assert.deepStrictEqual(claims('Todavía no funciona.'), []);
+  assert.deepStrictEqual(claims("Ce n'est pas corrigé."), []);
+  assert.deepStrictEqual(claims('Das ist noch nicht behoben.'), []);
+  assert.deepStrictEqual(claims('Si reinicias el servidor, funciona.'), []);
+});
+
+test('another language after a code edit needs a receipts block; English and short replies are judged as before', () => {
+  const ja = '日付の書式のバグを修正しました。すべてのテストが通ります。';
+  assert.ok(findClaims(ja, { editedCode: true }).length > 0);
+  assert.deepStrictEqual(findClaims(ja, { editedCode: false }), []);
+  const nl = 'Ik heb de fout in het bestand met datums opgelost en alles werkt weer prima.';
+  assert.ok(findClaims(nl, { editedCode: true }).length > 0);
+  assert.ok(looksEnglish('- src/foo.js: added validation\n- src/bar.js: updated tests\n- lib/x.js: renamed helper'));
+  assert.ok(!looksEnglish(ja));
+  assert.ok(!looksEnglish('He corregido el error en el archivo de fechas y ahora las pruebas pasan sin problemas.'));
 });
