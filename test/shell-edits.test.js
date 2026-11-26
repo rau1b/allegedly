@@ -89,3 +89,23 @@ test('a denied shell edit never ran, so it is not an edit', () => {
   const failed = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'd1', is_error: true, content: 'Exit code 1' }] } };
   assert.strictEqual(ranCodeEdit([failed])(b), true); // it ran; a failing exit code may still have edited
 });
+
+test('scratch copies in the temp folder, outside the project, are not edits (needs cwd)', () => {
+  const os = require('os');
+  const path = require('path');
+  const tmp = os.tmpdir().replace(/\\/g, '/');
+  const project = path.join(os.homedir(), 'code', 'app');
+  const run = (b) => ranCodeEdit([], isCodeEdit, { cwd: project })(b);
+  const write = (file) => ({ type: 'tool_use', id: 'w', name: 'Write', input: { file_path: file } });
+  assert.strictEqual(run(write(`${tmp}/addmonths-check/addmonths.test.js`)), false);
+  assert.strictEqual(run(bash(`cat > "${tmp}/probe/store.js" <<'EOF'\nx\nEOF`)), false);
+  assert.strictEqual(run(bash("cat > /tmp/probe.js <<'EOF'\nx\nEOF")), false);
+  // still edits: inside the project, outside temp (a sibling package), variables, unknown targets, no cwd
+  assert.strictEqual(run(write(path.join(project, 'src', 'a.js'))), true);
+  assert.strictEqual(run(write(path.join(os.homedir(), 'code', 'shared', 'util.js'))), true);
+  assert.strictEqual(run(bash('cat > "$D/store.js" <<\'EOF\'\nx\nEOF')), true);
+  assert.strictEqual(run(bash('git checkout main')), true);
+  assert.strictEqual(ranCodeEdit([])(write(`${tmp}/probe/a.js`)), true);
+  // a project that itself lives in temp (the benchmark's own folders) still counts
+  assert.strictEqual(ranCodeEdit([], isCodeEdit, { cwd: `${tmp}/bench-x` })(write(`${tmp}/bench-x/a.js`)), true);
+});

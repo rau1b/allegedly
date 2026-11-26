@@ -348,7 +348,7 @@ function editedFiles(entries, isCodeEdit) {
 function checkReceipts(text, entries, isCodeEditFn, { cwd, request } = {}) {
   const receipts = parseReceipts(text);
   if (receipts.length === 0) return [];
-  const isCodeEdit = ranCodeEdit(entries, isCodeEditFn); // a denied edit changed nothing
+  const isCodeEdit = ranCodeEdit(entries, isCodeEditFn, { cwd }); // denied edits and scratch copies don't count
   const results = freshResults(entries, isCodeEdit);
   const edited = editedFiles(entries, isCodeEdit);
   const bad = [];

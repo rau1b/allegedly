@@ -3,6 +3,7 @@
 // shell command that writes a code file (sed -i, a formatter, git checkout, > src/a.js).
 // Shared by the hook and the benchmark, so both count the same edits.
 
+const os = require('os');
 const path = require('path');
 const { shellWrites } = require('./shell-edits');
 
@@ -67,15 +68,36 @@ function resultText(b) {
   return Array.isArray(b.content) ? b.content.map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('\n') : '';
 }
 
-// isCodeEdit, minus the calls in `entries` that never ran.
-function ranCodeEdit(entries, isCodeEditFn = isCodeEdit) {
+// One spelling for paths from Windows, Git Bash and POSIX: c:/users/x, lower case.
+function canon(p) {
+  return String(p).replace(/\\/g, '/').replace(/^\/([a-z])\//i, '$1:/').replace(/\/+$/, '').toLowerCase();
+}
+
+// True when every file the block edits is a scratch copy: in the temp folder, outside the project.
+// Seen in the benchmark (task 04): Claude wrote a test into %TEMP%/addmonths-check to try an idea.
+// Paths with variables ($D/store.js) can't be placed, so they still count. Needs `cwd`.
+function scratchOnly(b, cwd) {
+  if (!cwd) return false;
+  const files = editTargets(b);
+  if (!files.length) return false; // git checkout and friends: files unknown
+  const project = canon(cwd);
+  const temps = [canon(os.tmpdir()), '/tmp', '/var/tmp'];
+  return files.every((f) => {
+    if (/[$%]/.test(f) || !path.isAbsolute(f) && !/^\/[a-z]\//i.test(f)) return false;
+    const c = canon(f);
+    return !(c === project || c.startsWith(project + '/')) && temps.some((t) => c.startsWith(t + '/'));
+  });
+}
+
+// isCodeEdit, minus the calls in `entries` that never ran, and (given `cwd`) scratch copies.
+function ranCodeEdit(entries, isCodeEditFn = isCodeEdit, { cwd } = {}) {
   const notRun = new Set();
   for (const e of entries) {
     const c = e && e.type === 'user' && e.message && e.message.content;
     if (!Array.isArray(c)) continue;
     for (const b of c) if (b && b.type === 'tool_result' && b.is_error && NOT_RUN.test(resultText(b))) notRun.add(b.tool_use_id);
   }
-  return (b) => isCodeEditFn(b) && !(b.id && notRun.has(b.id));
+  return (b) => isCodeEditFn(b) && !(b.id && notRun.has(b.id)) && !scratchOnly(b, cwd);
 }
 
 module.exports = { isCodeEdit, ranCodeEdit, editTargets, EDIT_TOOLS, NON_CODE_EXT };

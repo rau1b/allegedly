@@ -73,8 +73,8 @@ function finalAssistantText(entries) {
 }
 
 // True if Claude edited a code file this turn (an edit tool or a shell command that writes code).
-function editedCodeThisTurn(entries) {
-  const ran = ranCodeEdit(entries);
+function editedCodeThisTurn(entries, cwd) {
+  const ran = ranCodeEdit(entries, isCodeEdit, { cwd });
   return entries.some((e) => e.type === 'assistant' && blocks(e).some(ran));
 }
 
@@ -103,7 +103,7 @@ async function main() {
     // Once we sent Claude back, the claim is already on record: the reply owes a block
     // even if it avoids claim words this time ("the fix is confirmed", seen in a live run).
     const owed = input.stop_hook_active && weBlocked(input.session_id) === true;
-    const claims = findClaims(text, { editedCode: editedCodeThisTurn(entries) });
+    const claims = findClaims(text, { editedCode: editedCodeThisTurn(entries, input.cwd) });
     if (claims.length === 0 && !owed) return;
     reason = MSG_NO_BLOCK;
     notice = MSG_SECOND_MISS;
