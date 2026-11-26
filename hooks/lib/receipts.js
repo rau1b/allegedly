@@ -12,6 +12,7 @@
 const { touchesEdited } = require('./related');
 const { editTargets, ranCodeEdit, isCodeEdit: writesCode } = require('./edits');
 const { addedSkips } = require('./skips');
+const { shellWrites } = require('./shell-edits');
 
 const MIN_OUTPUT_CHARS = 3; // "ok" alone proves too little to match on
 
@@ -25,6 +26,9 @@ const ELLIPSIS = /…|\.{3}/;
 
 // Tools that only read or list. Their output shows what a file says, not that code works.
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead']);
+// Tools whose result only confirms Claude's own action: "has been updated successfully" proves
+// the edit was saved, not that the code works. Never proof, and not a read either.
+const OWN_ACTION_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'TodoWrite']);
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
 // Shell commands that only display or list. A command made only of these (and neutral ones) is weak.
 const READ_COMMANDS = new Set([
@@ -222,38 +226,86 @@ function isReadOnlyCommand(command) {
   return readsSomething;
 }
 
-// Where a tool result came from: 'run' (counts), 'read' (weak) or the shell command, for the forged check.
+// Where a tool result came from: 'run' (counts), 'read' (weak), 'own' (Claude's own edit, weak)
+// and the shell command, for the forged check.
 function describeSource(toolUse) {
   if (!toolUse) return { kind: 'run', command: null }; // unknown origin: don't punish it
   if (READ_TOOLS.has(toolUse.name)) return { kind: 'read', command: null };
+  if (OWN_ACTION_TOOLS.has(toolUse.name)) return { kind: 'own', command: null };
   const command = shellCommand(toolUse);
   // sed -i and cat > a.js use display commands but write code: not a read.
   if (command && isReadOnlyCommand(command) && !writesCode(toolUse)) return { kind: 'read', command };
   return { kind: 'run', command };
 }
 
+// A run whose output went to a file, read back later (cat, tail, Read): the text read is that run's
+// output, so it counts as that run. Two ways in, both seen in real sessions:
+//   - run_in_background answers "Output is being written to: <file>.output"
+//   - the command saves it itself: npm test > out.txt, npm test | tee out.log (live Haiku run, s19)
+const BACKGROUND_OUTPUT = /Output is being written to: (.+?\.output)\b/;
+
+// One spelling for paths: forward slashes, lower case, /c/ as c:/, no leading ./
+function pathText(s) {
+  return String(s).replace(/\\/g, '/').toLowerCase().replace(/(^|[\s"'=(])\/([a-z])\//g, '$1$2:/').replace(/^\.\//, '');
+}
+
+// Does this tool call only read `file`? Read with that path, or a read-only shell command naming it.
+// `file` may be relative (out.log), so a path ending in /out.log matches too.
+function readsFile(toolUse, file) {
+  if (!toolUse) return false;
+  if (toolUse.name === 'Read') {
+    const p = pathText((toolUse.input && toolUse.input.file_path) || '');
+    return p === file || p.endsWith('/' + file);
+  }
+  const command = shellCommand(toolUse);
+  if (!command || !isReadOnlyCommand(command)) return false;
+  const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[\\s"'=/])${escaped}(?:$|[\\s"';|)&])`).test(pathText(command));
+}
+
 // Tool results that came after the last code edit, as [{ toolUseId, text, source }] (text normalised).
 // `isCodeEdit(block)` says whether a tool_use block edits code; the hook owns that rule.
 function freshResults(entries, isCodeEdit) {
   const toolUses = new Map();
+  const useIndex = new Map();
   let start = 0;
   entries.forEach((e, i) => {
     if (e.type !== 'assistant') return;
     for (const b of blocks(e)) {
       if (!b || b.type !== 'tool_use') continue;
-      if (b.id) toolUses.set(b.id, b);
+      if (b.id) {
+        toolUses.set(b.id, b);
+        useIndex.set(b.id, i);
+      }
       if (isCodeEdit(b)) start = i + 1;
     }
   });
+  const outputs = new Map(); // output file -> { toolUse, index } of the run that last wrote it
   const results = [];
-  for (const e of entries.slice(start)) {
-    if (e.type !== 'user') continue;
-    for (const b of blocks(e)) {
-      if (b && b.type === 'tool_result') {
-        results.push({ toolUseId: b.tool_use_id, text: normalize(resultText(b)), source: describeSource(toolUses.get(b.tool_use_id)) });
+  entries.forEach((e, i) => {
+    if (e.type === 'assistant') {
+      for (const b of blocks(e)) {
+        const command = shellCommand(b);
+        if (!command || isCodeEdit(b)) continue;
+        for (const w of shellWrites(command, b.name)) if (w.how === 'redirect' && w.file) outputs.set(pathText(w.file), { toolUse: b, index: i });
       }
+      return;
     }
-  }
+    if (e.type !== 'user') return;
+    for (const b of blocks(e)) {
+      if (!b || b.type !== 'tool_result') continue;
+      let toolUse = toolUses.get(b.tool_use_id);
+      const bg = shellCommand(toolUse) && resultText(b).match(BACKGROUND_OUTPUT);
+      if (bg) outputs.set(pathText(bg[1].trim()), { toolUse, index: useIndex.get(b.tool_use_id) });
+      if (i < start) continue;
+      const out = [...outputs].find(([file]) => readsFile(toolUse, file));
+      if (out) {
+        if (out[1].index < start) continue; // the run came before the last edit: stale, whenever it was read
+        toolUse = out[1].toolUse;
+      }
+      results.push({ toolUseId: b.tool_use_id, text: normalize(resultText(b)), source: describeSource(toolUse) });
+    }
+  });
   return results;
 }
 
@@ -360,6 +412,16 @@ function typedIn(command, piece) {
   return false;
 }
 
+// The receipt quotes a pass count from a run that also reported failing tests, and leaves the
+// failures out: `# pass 3` from a run that printed `# fail 1`. Showing them (`# pass 3 · # fail 1`)
+// is honest. Only pass counts: a receipt quoting a program's own output ("Hello World") from a call
+// that also ran a failing test command is about that output (3 published Haiku runs, chained `;`).
+const PASS_COUNT = /#\s*pass\s+\d|\d+\s+(?:passed|passing)\b|\bpass(?:ed|ing)?\b.*\d/;
+function hidesFailures(parts, text) {
+  if (!parts.some((p) => PASS_COUNT.test(p)) || parts.some((p) => /\bfail/.test(p))) return false;
+  return resultCounts(text).fail > 0;
+}
+
 // Paths of the code files edited this turn.
 function editedFiles(entries, isCodeEdit) {
   const files = new Set();
@@ -397,12 +459,14 @@ function checkReceipts(text, entries, isCodeEditFn, { cwd, request } = {}) {
     // receipt text also sat in a file Claude had read, and that hit hid the real test run.
     const counts = hits.some((h) => h.source.kind === 'run') ? null : countClaim(whole);
     if (counts) hits = [...new Set([...hits, ...results.filter((res) => countsMatch(counts, res.text))])];
-    const real = hits.filter((h) => h.source.kind === 'run' && !isForged(parts, h.source, counts));
+    const ran = hits.filter((h) => h.source.kind === 'run' && !isForged(parts, h.source, counts));
+    const real = ran.filter((h) => !hidesFailures(parts, h.text));
     // Nothing was run since the edit, only read or searched: "re-quote it" can't help, so say weak.
     // Seen in the isolated benchmark (task 07): a grep receipt with a mis-quoted span.
     const onlyReads = results.length > 0 && results.every((res) => res.source.kind === 'read');
     if (hits.length === 0) bad.push({ ...r, why: onlyReads ? 'weak' : 'no-match' });
     else if (real.some((h) => touchesEdited(h.source.command, h.text, edited, cwd))) continue;
+    else if (real.length === 0 && ran.length > 0) bad.push({ ...r, why: 'failing', failed: resultCounts(ran[0].text).fail });
     else if (real.length > 0) bad.push({ ...r, why: 'unrelated', edited });
     else if (hits.some((h) => isForged(parts, h.source, counts))) bad.push({ ...r, why: 'forged' });
     else bad.push({ ...r, why: 'weak' });

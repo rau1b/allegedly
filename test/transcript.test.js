@@ -74,3 +74,21 @@ test('huge turn with no human message nearby: stops at the 2 MB cap, quickly', (
   assert.strictEqual(complete, false);
   assert.ok(ms < 200, `took ${ms.toFixed(1)} ms`);
 });
+
+// A background task finishing (run_in_background) arrives as a plain user message, not isMeta.
+// Seen in real transcripts (Claude Code 2.1): origin.kind 'task-notification'. It isn't the person.
+test('a background-task notification is not the human message', () => {
+  const notice = (extra) => JSON.stringify({ type: 'user', ...extra, message: { role: 'user', content: '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>' } });
+  for (const extra of [{ origin: { kind: 'task-notification' } }, {}]) {
+    const file = writeTranscript([human('fix the bug'), assistant('a'), notice(extra), assistant('b')]);
+    const { entries, human: h } = readRecentEntries(file);
+    assert.strictEqual(h.message.content, 'fix the bug');
+    assert.strictEqual(entries.length, 3);
+  }
+});
+
+test('a typed message with origin human still ends the turn', () => {
+  const typed = JSON.stringify({ type: 'user', origin: { kind: 'human' }, message: { role: 'user', content: 'now fix the other one' } });
+  const file = writeTranscript([human('fix the bug'), assistant('a'), typed, assistant('b')]);
+  assert.strictEqual(readRecentEntries(file).entries.length, 1);
+});

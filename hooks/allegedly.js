@@ -38,6 +38,9 @@ function badReceiptMessage(r) {
     const names = (r.files || []).slice(0, 2).map((f) => path.basename(f)).join(', ');
     return `allegedly: you switched tests off this turn (skip or only in ${names}), so a passing run proves less. Turn them back on and re-run, or mark it ${ALLEGEDLY_FORM}.`;
   }
+  if (r.why === 'failing') {
+    return `allegedly: the run behind the receipt for ${what} also reported ${r.failed} failing. Fix them, or quote the failures too and say why they're unrelated, or mark it ${ALLEGEDLY_FORM}.`;
+  }
   if (r.why === 'no-output') {
     return `allegedly: the receipt for ${what} quotes no output. Write it as command → output line, copied from a real run, or mark it ${ALLEGEDLY_FORM}.`;
   }

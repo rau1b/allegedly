@@ -15,7 +15,8 @@ const edit = (file) => ({
   type: 'assistant',
   message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: file } }] },
 });
-const result = (out) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: out }] } });
+// Output of some run. Its own id: if it shared the Edit's id, it would read as the Edit's own result.
+const result = (out) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'r1', content: out }] } });
 
 function runHook(entries, extra = {}, stateDir, env = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'allegedly-hook-'));
@@ -291,4 +292,73 @@ test('every send-back message spells out the allegedly form', () => {
   assert.match(noBlock.out.reason, form);
   const bad = runHook([human('x'), edit('src/a.js'), result('ok'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')]);
   assert.match(bad.out.reason, form);
+});
+
+// run_in_background: the launch answers with an output file, a notification arrives later, and
+// Claude reads the file. Seen in real transcripts: cat, tail or Read on <id>.output.
+const OUT = String.raw`C:\Users\me\AppData\Local\Temp\claude\proj\tasks\b7arl.output`;
+const launch = [
+  shell('npm test', 'bg'),
+  shellResult('bg', `Command running in background with ID: b7arl. Output is being written to: ${OUT}. You will be notified when it completes.`),
+];
+const notified = { type: 'user', origin: { kind: 'task-notification' }, message: { role: 'user', content: `<task-notification>\n<task-id>b7arl</task-id>\n<output-file>${OUT}</output-file>\n<status>completed</status>\n</task-notification>` } };
+const readOut = (how) =>
+  how === 'Read'
+    ? [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'rd', name: 'Read', input: { file_path: OUT } }] } }, shellResult('rd', '     1\t# tests 14\n     2\t# pass 14\n     3\t# fail 0')]
+    : [shell(`tail -5 "${OUT.split(String.fromCharCode(92)).join('/')}"`, 'rd'), shellResult('rd', '# tests 14\n# pass 14\n# fail 0')]; // Git Bash spelling
+
+test('a background run read back after its notification is a real receipt', () => {
+  for (const how of ['Read', 'tail']) {
+    const r = runHook([human('fix it'), edit('src/app.js'), result('ok'), ...launch, say('Running the suite.'), notified, ...readOut(how), say(PASS_RECEIPT)]);
+    assert.strictEqual(r.out, null, how);
+  }
+});
+
+test('a background run started before the last edit is stale, even when read after it', () => {
+  const r = runHook([human('fix it'), ...launch, edit('src/app.js'), result('ok'), notified, ...readOut('tail'), say(PASS_RECEIPT)]);
+  assert.strictEqual(r.out.decision, 'block');
+  assert.match(r.out.reason, /since your last code edit/);
+});
+
+// Live Haiku run (s19): `npm test > out.txt 2>&1; echo "exit=$?" >> out.txt` in the background,
+// then Read on out.txt. The text read is the run's output.
+test('output a run saved to a file and read back is a real receipt', () => {
+  const LOG = String.raw`C:\Users\me\AppData\Local\Temp\npm-test-output.txt`;
+  const saved = [shell('npm test > /c/Users/me/AppData/Local/Temp/npm-test-output.txt 2>&1; echo "exit=$?" >> /c/Users/me/AppData/Local/Temp/npm-test-output.txt', 'bg'), shellResult('bg', '')];
+  const readLog = [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'rd', name: 'Read', input: { file_path: LOG } }] } }, shellResult('rd', '     1\t# tests 14\n     2\t# pass 14\n     3\t# fail 0\n     4\texit=0')];
+  assert.strictEqual(runHook([human('fix it'), edit('src/app.js'), result('ok'), ...saved, ...readLog, say(PASS_RECEIPT)]).out, null);
+  const teed = [shell('npm test | tee out.log', 't'), shellResult('t', '# pass 14'), shell('cat ./out.log', 'c'), shellResult('c', '# pass 14')];
+  assert.strictEqual(runHook([human('fix it'), edit('src/app.js'), result('ok'), ...teed, say(PASS_RECEIPT)]).out, null);
+  const stale = runHook([human('fix it'), ...saved, edit('src/app.js'), result('ok'), ...readLog, say(PASS_RECEIPT)]);
+  assert.match(stale.out.reason, /since your last code edit/);
+});
+
+test('text Claude printed into a file and read back is still forged, and a file it wrote is still weak', () => {
+  const echoed = runHook([human('fix it'), edit('src/app.js'), result('ok'), shell('echo "# pass 14" > out.txt', 'e'), shellResult('e', ''), shell('cat out.txt', 'c'), shellResult('c', '# pass 14'), say(PASS_RECEIPT)]);
+  assert.match(echoed.out.reason, /printed yourself/);
+  const written = [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'w', name: 'Write', input: { file_path: 'notes/out.txt', content: '# pass 14' } }] } }, shellResult('w', 'File created')];
+  const weak = runHook([human('fix it'), edit('src/app.js'), result('ok'), ...written, shell('cat notes/out.txt', 'c'), shellResult('c', '# pass 14'), say(PASS_RECEIPT)]);
+  assert.strictEqual(weak.out.decision, 'block');
+});
+
+test("an edit tool's own result is not a receipt", () => {
+  const r = runHook([human('fix it'), edit('src/app.js'), shellResult('t1', 'The file src/app.js has been updated successfully.'), say('Fixed.\n\n🧾 1 receipt · edit app.js → has been updated successfully')]);
+  assert.strictEqual(r.out.decision, 'block');
+});
+
+test('a pass count quoted from a run that also failed tests is sent back, unless the failures are shown', () => {
+  const failing = [human('fix it'), edit('src/app.js'), result('ok'), shell('npm test', 's1'), shellResult('s1', '# tests 15\n# pass 14\n# fail 1')];
+  const hidden = runHook([...failing, say(PASS_RECEIPT)]);
+  assert.strictEqual(hidden.out.decision, 'block');
+  assert.match(hidden.out.reason, /also reported 1 failing/);
+  assert.ok(hidden.out.reason.split(/\s+/).length < 40);
+  const shown = runHook([...failing, say('Fixed the date bug; the one failure is the network test, unrelated.\n\n🧾 1 receipt · npm test → `# pass 14` · `# fail 1`')]);
+  assert.strictEqual(shown.out, null);
+});
+
+// 3 published Haiku runs: `node --test test/ ; node -e "..."` in one call. The test command failed,
+// the receipt quoted the node -e output. That output is real and isn't a pass count.
+test("program output from a call that also ran a failing test command still counts", () => {
+  const r = runHook([human('fix it'), edit('src/app.js'), result('ok'), shell('node --test test/; node -e "console.log(titleCase(\'hello world\'))"', 's1'), shellResult('s1', '# pass 0\n# fail 1\nHello World'), say('Fixed.\n\n🧾 1 receipt · node -e titleCase → Hello World')]);
+  assert.strictEqual(r.out, null);
 });

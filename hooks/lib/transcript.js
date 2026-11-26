@@ -10,10 +10,15 @@ const CHUNK_SIZE = 64 * 1024;
 
 // True for a message the person typed. Tool results are also stored with the
 // user role, and so are messages Claude Code injects; neither counts.
+// A background task finishing (run_in_background) is stored as a plain user message too,
+// not isMeta, with origin.kind 'task-notification'. Older versions have no origin, so the
+// <task-notification> tag is checked as well. Treating it as the person's message hid the
+// edits and the launch before it, so honest receipts from background runs were sent back.
 function isHumanMessage(entry) {
   if (!entry || entry.type !== 'user' || entry.isMeta || !entry.message) return false;
+  if (entry.origin && entry.origin.kind && entry.origin.kind !== 'human') return false;
   const content = entry.message.content;
-  if (typeof content === 'string') return true;
+  if (typeof content === 'string') return !/^\s*<task-notification>/.test(content);
   return Array.isArray(content) && content.some((block) => block && block.type === 'text');
 }
 
