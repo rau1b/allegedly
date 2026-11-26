@@ -370,3 +370,20 @@ test('F2: a literal hit in a read file does not hide a real run whose counts mat
   // With only the read, it is still weak.
   assert.strictEqual(check('npm test → # pass 141, # fail 0', entries.slice(0, 2))[0].why, 'weak');
 });
+
+test('output that is a function input is computed, not forged (Sonnet benchmark, task 10)', () => {
+  const tu = (id, command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } });
+  const out = (id, content) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  const real = `node -e "console.log(require('./profile').displayName({name:' Ada Lovelace '}))"`;
+  assert.deepStrictEqual(checkReceipts('🧾 1 receipt · node -e → `Ada Lovelace`', [editE, tu('r', real), out('r', 'Ada Lovelace\n')], isCodeEdit), []);
+  const fake = `node -e "console.log('Ada Lovelace')"`;
+  assert.strictEqual(checkReceipts('🧾 1 receipt · node -e → `Ada Lovelace`', [editE, tu('f', fake), out('f', 'Ada Lovelace\n')], isCodeEdit)[0].why, 'forged');
+  assert.strictEqual(checkReceipts('🧾 1 receipt · echo → `14 passed`', [editE, tu('e', 'echo "14 passed"'), out('e', '14 passed\n')], isCodeEdit)[0].why, 'forged');
+});
+
+test('unquoted output lines joined with " / ", " | " or "; " match in order (Sonnet benchmark, task 11)', () => {
+  const r = '🧾 1 receipt · node -e → Invoice 7 is due on 2026-03-05 / 1,2026-03-05,9';
+  assert.deepStrictEqual(checkReceipts(r, [editE, res('Invoice 7 is due on 2026-03-05\n1,2026-03-05,9\n')], isCodeEdit), []);
+  assert.strictEqual(checkReceipts(r, [editE, res('1,2026-03-05,9\nInvoice 7 is due on 2026-03-05\n')], isCodeEdit)[0].why, 'no-match');
+  assert.strictEqual(checkReceipts(r, [editE, res('Invoice 7 is due on 2026-03-05\n')], isCodeEdit)[0].why, 'no-match');
+});

@@ -257,8 +257,14 @@ function freshResults(entries, isCodeEdit) {
   return results;
 }
 
+// Joiners Claude puts between output lines it quotes in one receipt, outside backticks:
+// "Invoice 7 is due on 2026-03-05 / 1,2026-03-05,9" (Sonnet benchmark, tasks 04 and 11).
+// Each piece must still appear, in order, in the same result.
+const JOINERS = /\s+[\/|]\s+|;\s+/;
+
 function pieces(receipt) {
-  const spans = receipt.quoted && receipt.quoted.length ? receipt.quoted : [receipt.output];
+  const quoted = receipt.quoted && receipt.quoted.length;
+  const spans = quoted ? receipt.quoted : receipt.output.split(JOINERS);
   return spans.flatMap((t) => t.split(ELLIPSIS)).map(normalize).filter(Boolean);
 }
 
@@ -326,8 +332,32 @@ function isForged(parts, source, counts) {
   if (!source.command || !PRINTERS.test(source.command)) return false;
   const command = normalize(source.command);
   if (counts && countsMatch(counts, command)) return true;
-  const typed = parts.filter((p) => command.includes(p));
+  const typed = parts.filter((p) => typedIn(command, p));
   return typed.length > 0 && (typed.length === parts.length || typed.some((p) => /\d/.test(p)));
+}
+
+const PRINTER_CALL = /(?:^|[^\w.])(?:console\.log|print|puts|printf|write-output|write-host|echo)$/;
+
+// True if `piece` appears in the command as text being printed, not as an argument to some other
+// function. displayName({name:' Ada Lovelace '}) printing "Ada Lovelace" computed it (Sonnet
+// benchmark, task 10), while console.log("14 passed") or echo "14 passed" typed it.
+function typedIn(command, piece) {
+  for (let at = command.indexOf(piece); at !== -1; at = command.indexOf(piece, at + 1)) {
+    let depth = 0;
+    let open = -1;
+    for (let i = at - 1; i >= 0; i--) {
+      if (command[i] === ')') depth++;
+      else if (command[i] === '(') {
+        if (depth === 0) {
+          open = i;
+          break;
+        }
+        depth--;
+      }
+    }
+    if (open === -1 || PRINTER_CALL.test(command.slice(0, open).trimEnd())) return true;
+  }
+  return false;
 }
 
 // Paths of the code files edited this turn.

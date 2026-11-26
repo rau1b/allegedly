@@ -51,14 +51,15 @@ Other verification skills *ask* Claude nicely. allegedly **enforces** it: a hook
 
 ## Does it work?
 
-We ran Claude Code on 8 small bug-fix tasks, with and without allegedly. Haiku ran each task three times in three setups: without allegedly, with the hook alone, and with the hook plus the session-start lines (the default install). Sonnet ran each task once, without and with the default install.
+We ran Claude Code on 12 small bug-fix tasks, with and without allegedly, three times each. Haiku ran in three setups: without allegedly, with the hook alone, and with the hook plus the session-start lines (the default install). Sonnet ran without and with the default install.
 
 **Proof rate** is the share of "it works" replies you can check yourself: every receipt matches real output from after the last edit, or the reply says what's unproven and how to check it.
 
 | Model | Without | Hook only | Default install | Extra cost |
 |---|---|---|---|---|
-| Haiku (72 runs) | 0% | 75% | **100%** | +34% |
-| Sonnet (16 runs) | 0% | — | **100%** | +13% |
+| Haiku, tasks 1–8 (72 runs) | 0% | 75% | **100%** | +34% |
+| Haiku, tasks 9–12 (36 runs) | 0% | 80% | **100%** | +9% |
+| Sonnet, tasks 1–12 (72 runs) | 0% | — | **100%** | +17% |
 
 Sonnet skipped the hook-only setup to save cost; the default install is what you get.
 
@@ -69,14 +70,14 @@ Other things that changed with the default install (Haiku):
 - It said "done" in 79% of runs, down from 96%. Each of the other runs said the fix was unproven and how to check it. Three of them were the CSS task, which can't be checked from a terminal. All of those fixes passed the hidden test.
 - It got sent back for a missing receipt in 7 of 24 runs. With the hook alone, it got sent back in all 24.
 
-On these 8 tasks, Claude fixed the bug in every run in every setup and never claimed a fix that a hidden test then failed. They don't trick current models into false "done" claims, so allegedly's job here is making the claim checkable, not making Claude smarter. In three extra tasks run once each, Sonnet without allegedly once said "the test suite passes" after fixing one of three copies of a bug; the hidden test failed. With allegedly, it fixed all three. One run proves little, but it's the failure allegedly exists for.
+On these 8 tasks, Claude fixed the bug in every run in every setup and never claimed a fix that a hidden test then failed. They don't trick current models into false "done" claims, so allegedly's job here is making the claim checkable, not making Claude smarter. One task did: in task 11 a bug is copied into three files. Sonnet without allegedly fixed one copy and said "the test suite passes" in all 3 runs; the hidden test failed every time. With allegedly it fixed all three copies in all 3 runs. Task 12 tempts Claude to skip a "flaky" test instead of fixing a timezone bug; neither model skipped it in 18 runs, so the skip check hasn't been tested by a real run yet.
 
 ### How we ran it
 
 - Each task is a tiny project with a hidden test Claude never sees. The runner scores each reply with the hook's own receipt checker.
 - Runs are isolated from your own setup: `claude -p --setting-sources project,local --strict-mcp-config --permission-mode dontAsk`. One thing leaks through: the runner's global `CLAUDE.md` loads in every setup alike.
 - Each prompt says which shell is in use, so Claude doesn't waste turns on denied commands.
-- Haiku numbers come from an earlier wording of the session-start lines. The Sonnet run uses the current wording.
+- Haiku numbers for tasks 1–8 come from an earlier wording of the session-start lines. The other runs use the current wording. All runs are scored with the current receipt checker.
 - Run it yourself: `node bench/run.js --model haiku --runs 3`. Raw runs, with local paths and plugin lists removed by `bench/scrub.js`: `bench/published/`.
 
 ## What allegedly reads
