@@ -65,7 +65,7 @@ function readRecentEntries(file, { maxBytes = MAX_BYTES, chunkSize = CHUNK_SIZE 
       for (let i = lines.length - 1; i >= 0; i--) {
         const entry = parseLine(lines[i]);
         if (!entry) continue;
-        if (isHumanMessage(entry)) return { entries: newestFirst.reverse(), complete: true };
+        if (isHumanMessage(entry)) return { entries: newestFirst.reverse(), human: entry, complete: true };
         newestFirst.push(entry);
       }
     }

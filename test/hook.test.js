@@ -129,6 +129,20 @@ test('a run that saves its output to a log is not an edit', () => {
   assert.strictEqual(r.out, null);
 });
 
+test('tests switched off this turn: a passing receipt is sent back, file named', () => {
+  const skip = {
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: 'test/dates.test.js', old_string: "it('pads', () => {", new_string: "it.skip('pads', () => {" } }] },
+  };
+  const r = runHook([human('fix it'), edit('src/dates.js'), skip, result('# pass 14'), say(PASS_RECEIPT)]);
+  assert.strictEqual(r.out.decision, 'block');
+  assert.match(r.out.reason, /switched tests off.*dates\.test\.js/);
+  assert.match(r.out.reason, /allegedly · <claim> · to check: <step>/);
+  assert.ok(r.out.reason.split(/\s+/).length < 40, 'under 40 words');
+  const asked = runHook([human('the dates test is flaky, skip it'), edit('src/dates.js'), skip, result('# pass 14'), say(PASS_RECEIPT)]);
+  assert.strictEqual(asked.out, null);
+});
+
 test('bad receipt on the second try: lets Claude finish, tells the user', () => {
   const r = runHook([human('x'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')], { stop_hook_active: true });
   assert.strictEqual(r.out.decision, undefined);

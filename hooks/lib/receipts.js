@@ -11,6 +11,7 @@
 
 const { touchesEdited } = require('./related');
 const { editTargets, ranCodeEdit, isCodeEdit: writesCode } = require('./edits');
+const { addedSkips } = require('./skips');
 
 const MIN_OUTPUT_CHARS = 3; // "ok" alone proves too little to match on
 
@@ -342,8 +343,9 @@ function editedFiles(entries, isCodeEdit) {
 }
 
 // Returns the receipts that fail, each with a `why`:
-// 'no-output', 'no-match', 'forged', 'weak' or 'unrelated' (with `edited`, the files it should touch).
-function checkReceipts(text, entries, isCodeEditFn, { cwd } = {}) {
+// 'no-output', 'no-match', 'forged', 'weak' or 'unrelated' (with `edited`, the files it should touch),
+// or one 'skipped' entry (with `files`) when every receipt is fine but Claude switched tests off this turn.
+function checkReceipts(text, entries, isCodeEditFn, { cwd, request } = {}) {
   const receipts = parseReceipts(text);
   if (receipts.length === 0) return [];
   const isCodeEdit = ranCodeEdit(entries, isCodeEditFn); // a denied edit changed nothing
@@ -374,6 +376,10 @@ function checkReceipts(text, entries, isCodeEditFn, { cwd } = {}) {
     else if (real.length > 0) bad.push({ ...r, why: 'unrelated', edited });
     else if (hits.some((h) => isForged(parts, h.source, counts))) bad.push({ ...r, why: 'forged' });
     else bad.push({ ...r, why: 'weak' });
+  }
+  if (bad.length === 0) {
+    const files = addedSkips(entries, request);
+    if (files.length) bad.push({ ...receipts[0], why: 'skipped', files });
   }
   return bad;
 }

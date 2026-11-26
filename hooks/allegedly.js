@@ -9,6 +9,7 @@ const { findClaims, hasReceiptsBlock } = require('./lib/claims');
 const { checkReceipts } = require('./lib/receipts');
 const { weBlocked, markBlocked, clearBlocked } = require('./lib/state');
 const { isCodeEdit, ranCodeEdit } = require('./lib/edits');
+const { humanText } = require('./lib/skips');
 
 // Includes the format: the skill may not have loaded, so this can be Claude's only instruction.
 // The allegedly form is spelled out too: told only "or mark it allegedly", Haiku invented
@@ -32,6 +33,10 @@ function badReceiptMessage(r) {
   if (r.why === 'unrelated') {
     const names = (r.edited || []).slice(0, 2).map((f) => path.basename(f)).join(', ');
     return `allegedly: the receipt for ${what} ran tests that don't touch what you edited (${names}). Run tests that cover it, or mark it ${ALLEGEDLY_FORM}.`;
+  }
+  if (r.why === 'skipped') {
+    const names = (r.files || []).slice(0, 2).map((f) => path.basename(f)).join(', ');
+    return `allegedly: you switched tests off this turn (skip or only in ${names}), so a passing run proves less. Turn them back on and re-run, or mark it ${ALLEGEDLY_FORM}.`;
   }
   if (r.why === 'no-output') {
     return `allegedly: the receipt for ${what} quotes no output. Write it as command → output line, copied from a real run, or mark it ${ALLEGEDLY_FORM}.`;
@@ -84,13 +89,13 @@ async function main() {
   if (!input.transcript_path) return;
   if (!input.stop_hook_active) clearBlocked(input.session_id); // a new stop cycle
 
-  const { entries } = readRecentEntries(input.transcript_path);
+  const { entries, human } = readRecentEntries(input.transcript_path);
   const text = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : finalAssistantText(entries);
 
   let reason, notice;
   if (hasReceiptsBlock(text)) {
     // A block is there: every `verified` receipt must quote fresh output.
-    const bad = checkReceipts(text, entries, isCodeEdit, { cwd: input.cwd });
+    const bad = checkReceipts(text, entries, isCodeEdit, { cwd: input.cwd, request: human ? humanText([human]) : '' });
     if (bad.length === 0) return;
     reason = badReceiptMessage(bad[0]);
     notice = MSG_SECOND_BAD;

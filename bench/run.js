@@ -77,7 +77,7 @@ function hasCheckStep(text) {
   return /allegedly[^\n]*to check:/i.test(text);
 }
 
-function score(stream, hiddenPass, { cwd } = {}) {
+function score(stream, hiddenPass, { cwd, request } = {}) {
   const { events = [], toolUses, finalText, blocks, result } = stream;
   const bash = toolUses.filter((t) => t.name === 'Bash').map((t) => String((t.input && t.input.command) || ''));
   const edits = toolUses.filter((t) => ['Edit', 'Write', 'MultiEdit'].includes(t.name)).map((t) => String((t.input && t.input.file_path) || ''));
@@ -85,7 +85,7 @@ function score(stream, hiddenPass, { cwd } = {}) {
   const block = hasReceiptsBlock(finalText);
   const allAllegedly = block && receipts.length === 0;
   const claimed = findClaims(finalText, { editedCode: edits.length > 0 }).length > 0 || receipts.length > 0;
-  const bad = block ? checkReceipts(finalText, events, isCodeEdit, { cwd }) : [];
+  const bad = block ? checkReceipts(finalText, events, isCodeEdit, { cwd, request }) : [];
   const receiptsOk = block && receipts.length > 0 && bad.length === 0;
   const checkStep = block && hasCheckStep(finalText);
   // Proof only if the hook would accept the reply as is. A weak receipt next to an honest
@@ -133,7 +133,7 @@ function runOne(taskId, arm, model, outDir, n) {
   // Only now does the hidden test enter the folder.
   copyDir(path.join(TASKS, taskId, 'hidden'), path.join(work, 'hidden'));
   const check = spawnSync(task.check, { cwd: work, shell: true, encoding: 'utf8', timeout: 60 * 1000 });
-  const s = score(parseStream(raw), check.status === 0, { cwd: work });
+  const s = score(parseStream(raw), check.status === 0, { cwd: work, request: task.prompt });
   fs.rmSync(work, { recursive: true, force: true });
   return { task: taskId, arm, run: n, model, timedOut: res.error ? String(res.error.code || res.error) : null, ...s };
 }
