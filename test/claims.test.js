@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { findClaims, hasReceiptsBlock, looksEnglish } = require('../hooks/lib/claims');
+const { findClaims, hasReceiptsBlock, looksEnglish } = require('../plugin/hooks/lib/claims');
 
 const isClaim = (text, opts) => findClaims(text, opts).length > 0;
 

@@ -89,7 +89,7 @@ On these 8 tasks, Claude fixed the bug in every run in every setup and never cla
 - **Nothing leaves your machine.** The hook contains no network code at all, and a test enforces that.
 - It writes one thing: an empty marker file in your temp folder (`allegedly/<session id>.blocked`) while it has sent Claude back, so it never sends Claude back twice in one turn. No transcript text goes in it.
 - At session start, a second small hook adds three lines to Claude's context explaining the receipt format (about 60 tokens). With it, Claude gets the format right the first time much more often, so fewer replies are sent back.
-- The whole hook is plain JavaScript in `hooks/`: about 1,650 lines and no dependencies. It doesn't start other programs either.
+- The whole hook is plain JavaScript in `plugin/hooks/`: about 1,650 lines and no dependencies. It doesn't start other programs either.
 
 ## Headless and CI (`claude -p`, the Agent SDK)
 

@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "allegedly",
-      "source": "./",
+      "source": "./plugin",
       "description": "Claude can't say 'done' without receipts."
     }
   ]

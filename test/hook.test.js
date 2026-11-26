@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const HOOK = path.join(__dirname, '..', 'hooks', 'allegedly.js');
+const HOOK = path.join(__dirname, '..', 'plugin', 'hooks', 'allegedly.js');
 
 const human = (text) => ({ type: 'user', message: { role: 'user', content: text } });
 const say = (text) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
@@ -230,7 +230,7 @@ test('state cannot be saved: never loops, falls back to notifying', () => {
 });
 
 test('session id with path characters stays inside the state folder', () => {
-  const { stateFile } = require('../hooks/lib/state');
+  const { stateFile } = require('../plugin/hooks/lib/state');
   const f = stateFile('../../etc/passwd');
   assert.ok(!path.basename(f).includes('/') && !f.includes('..'));
 });

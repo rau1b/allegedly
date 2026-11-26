@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 
-const HOOKS_DIR = path.join(__dirname, '..', 'hooks');
+const HOOKS_DIR = path.join(__dirname, '..', 'plugin', 'hooks');
 const FORBIDDEN = [
   /require\(\s*['"](?:node:)?(?:http|https|http2|net|tls|dgram|dns|child_process|worker_threads|inspector)['"]\s*\)/,
   /\bimport\s*\(?\s*['"](?:node:)?(?:http|https|http2|net|tls|dgram|dns|child_process)['"]/,

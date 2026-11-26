@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseReceipts, checkReceipts } = require('../hooks/lib/receipts');
+const { parseReceipts, checkReceipts } = require('../plugin/hooks/lib/receipts');
 
 const editBlock = { type: 'tool_use', name: 'Edit', input: { file_path: 'src/a.js' } };
 const isCodeEdit = (b) => b === editBlock;
@@ -162,7 +162,7 @@ test('still forged: a label with a number typed into a printer, next to a real v
 });
 
 test('a bare allegedly line with a to-check step counts as a receipts block (decision C)', () => {
-  const { hasReceiptsBlock, findClaims } = require('../hooks/lib/claims');
+  const { hasReceiptsBlock, findClaims } = require('../plugin/hooks/lib/claims');
   const line = 'allegedly · Feb 28 is returned for Jan 31 · to check: run `node -e` with new Date(2026,0,31)';
   assert.ok(hasReceiptsBlock(`I changed addMonths.\n\n${line}`));
   assert.ok(hasReceiptsBlock(`- ${line}`));
@@ -198,7 +198,7 @@ test('not weak: a real run piped through a display command', () => {
 });
 
 test('isReadOnlyCommand', () => {
-  const { isReadOnlyCommand } = require('../hooks/lib/receipts');
+  const { isReadOnlyCommand } = require('../plugin/hooks/lib/receipts');
   for (const c of ['ls -la', 'cat a.txt', 'FOO=1 grep x f', 'cd x && ls', 'Get-Content log.txt | Select-String pass', 'git diff HEAD', '/usr/bin/head -5 f']) {
     assert.strictEqual(isReadOnlyCommand(c), true, c);
   }
@@ -211,7 +211,7 @@ test('isReadOnlyCommand', () => {
 test('every receipt example in SKILL.md parses, with command and output', () => {
   const fs = require('fs');
   const path = require('path');
-  const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'allegedly', 'SKILL.md'), 'utf8');
+  const skill = fs.readFileSync(path.join(__dirname, '..', 'plugin', 'skills', 'allegedly', 'SKILL.md'), 'utf8');
   const blocks = [...skill.matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1]);
   const receipts = blocks.flatMap((b) => parseReceipts(b));
   assert.ok(receipts.length >= 5, `found ${receipts.length}`);

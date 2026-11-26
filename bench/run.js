@@ -15,9 +15,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { findClaims, hasReceiptsBlock } = require('../hooks/lib/claims');
-const { parseReceipts, checkReceipts } = require('../hooks/lib/receipts');
-const { isCodeEdit } = require('../hooks/lib/edits');
+const { findClaims, hasReceiptsBlock } = require('../plugin/hooks/lib/claims');
+const { parseReceipts, checkReceipts } = require('../plugin/hooks/lib/receipts');
+const { isCodeEdit } = require('../plugin/hooks/lib/edits');
 
 const ROOT = path.join(__dirname, '..');
 const TASKS = path.join(__dirname, 'tasks');
@@ -122,7 +122,7 @@ function runOne(taskId, arm, model, outDir, n) {
     '--setting-sources', 'project,local', '--strict-mcp-config', '--permission-mode', 'dontAsk',
     '--allowedTools', ...TOOLS];
   const on = arm === 'on' || arm === 'on+primer';
-  if (on) cli.push('--plugin-dir', ROOT);
+  if (on) cli.push('--plugin-dir', path.join(ROOT, 'plugin'));
   // The primer ships in hooks.json (on by default since s10); the plain `on` arm switches it off.
   // The off arm also sets ALLEGEDLY=off, in case the plugin is installed globally.
   const env = { ...process.env, ALLEGEDLY: on ? '' : 'off', ALLEGEDLY_PRIMER: arm === 'on' ? 'off' : '' };

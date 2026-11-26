@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { readRecentEntries } = require('../hooks/lib/transcript');
+const { readRecentEntries } = require('../plugin/hooks/lib/transcript');
 
 const human = (text) => JSON.stringify({ type: 'user', message: { role: 'user', content: text } });
 const toolResult = (out) =>

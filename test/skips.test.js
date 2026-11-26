@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { addedSkips, count } = require('../hooks/lib/skips');
+const { addedSkips, count } = require('../plugin/hooks/lib/skips');
 
 const human = (text) => ({ type: 'user', message: { content: text } });
 const tool = (name, input, id = 'e1') => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });

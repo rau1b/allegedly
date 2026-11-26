@@ -3,10 +3,10 @@
 // Claude writes and runs (python fix.py).
 const test = require('node:test');
 const assert = require('node:assert');
-const { addedSkips, shellSkipDelta } = require('../hooks/lib/skips');
-const { ranCodeEdit, runsScript } = require('../hooks/lib/edits');
-const { checkReceipts } = require('../hooks/lib/receipts');
-const { isCodeEdit } = require('../hooks/lib/edits');
+const { addedSkips, shellSkipDelta } = require('../plugin/hooks/lib/skips');
+const { ranCodeEdit, runsScript } = require('../plugin/hooks/lib/edits');
+const { checkReceipts } = require('../plugin/hooks/lib/receipts');
+const { isCodeEdit } = require('../plugin/hooks/lib/edits');
 
 const human = (text) => ({ type: 'user', message: { content: text } });
 const tool = (name, input, id) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });

@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { touchesEdited, targetedTests, looksLikeTestFile, core } = require('../hooks/lib/related');
+const { touchesEdited, targetedTests, looksLikeTestFile, core } = require('../plugin/hooks/lib/related');
 
 test('core name strips test markers and extensions', () => {
   assert.strictEqual(core('test/auth.test.js'), 'auth');

@@ -1,8 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { shellWrites } = require('../hooks/lib/shell-edits');
-const { isCodeEdit, editTargets, ranCodeEdit } = require('../hooks/lib/edits');
+const { shellWrites } = require('../plugin/hooks/lib/shell-edits');
+const { isCodeEdit, editTargets, ranCodeEdit } = require('../plugin/hooks/lib/edits');
 
 const bash = (command, name = 'Bash', id = 'b1') => ({ type: 'tool_use', id, name, input: { command } });
 const edits = (command, name) => {

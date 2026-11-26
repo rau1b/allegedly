@@ -3,10 +3,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { PRIMER } = require('../hooks/primer');
-const { parseReceipts } = require('../hooks/lib/receipts');
+const { PRIMER } = require('../plugin/hooks/primer');
+const { parseReceipts } = require('../plugin/hooks/lib/receipts');
 
-const SCRIPT = path.join(__dirname, '..', 'hooks', 'primer.js');
+const SCRIPT = path.join(__dirname, '..', 'plugin', 'hooks', 'primer.js');
 const run = (env) => spawnSync(process.execPath, [SCRIPT], { env: { ...process.env, ...env }, encoding: 'utf8' });
 
 test('primer prints SessionStart additionalContext', () => {
@@ -26,7 +26,7 @@ test('primer is silent when ALLEGEDLY_PRIMER=off', () => {
 });
 
 test('primer is registered as a SessionStart hook in hooks.json', () => {
-  const hooks = JSON.parse(require('fs').readFileSync(path.join(__dirname, '..', 'hooks', 'hooks.json'), 'utf8')).hooks;
+  const hooks = JSON.parse(require('fs').readFileSync(path.join(__dirname, '..', 'plugin', 'hooks', 'hooks.json'), 'utf8')).hooks;
   assert.match(hooks.SessionStart[0].hooks[0].command, /hooks\/primer\.js/);
 });
 
