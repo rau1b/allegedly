@@ -1,5 +1,7 @@
 # allegedly
 
+[![test](https://github.com/rau1b/allegedly/actions/workflows/test.yml/badge.svg)](https://github.com/rau1b/allegedly/actions/workflows/test.yml)
+
 **Claude fixed it… allegedly.**
 
 The same bug, the same model (Sonnet), two real runs from our benchmark:
