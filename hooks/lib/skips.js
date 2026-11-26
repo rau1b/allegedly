@@ -17,7 +17,8 @@ const MARKERS = [
   /#\[ignore\]/g, // Rust
   /@(?:Disabled|Ignore)\b/g, // JUnit
 ];
-const ASKED = /\b(?:skip|skipp(?:ed|ing)|disable|xfail|quarantine|flaky|\.only)\b/i;
+// "flaky" alone isn't a request: "CI is red because of one flaky test" asks for a fix (bench task 12).
+const ASKED = /\b(?:skip|skipp(?:ed|ing)|disable|xfail|quarantine|\.only)\b/i;
 
 function count(text) {
   const s = String(text || '');
