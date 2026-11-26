@@ -23,11 +23,11 @@ const ROOT = path.join(__dirname, '..');
 const TASKS = path.join(__dirname, 'tasks');
 // Read-only shell commands are allowed too: on task 04 (isolated run) `cd <dir> && find …` was denied,
 // and Haiku then decided Bash was off entirely. Same list in both arms.
-const READ_SHELL = ['cd', 'ls', 'find', 'cat', 'head', 'tail', 'wc', 'grep'].map((c) => `Bash(${c}:*)`);
+const READ_SHELL = ['cd', 'ls', 'find', 'cat', 'head', 'tail', 'wc', 'grep', 'echo'].map((c) => `Bash(${c}:*)`);
 const TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test)', 'Bash(npm test:*)', 'Bash(node:*)', ...READ_SHELL];
 // s9: 16 of 72 runs still hit a denial (`cd "…" && …`, subshells, mkdir, mktemp, PowerShell) and Haiku
 // then stopped checking. Telling the model the rules is simpler than chasing allowlist patterns.
-const SHELL_NOTE = '\n\n(Shell: run commands from the current folder; don\'t cd. Allowed: node, npm test, ls, cat, grep, find, head, tail, wc.)';
+const SHELL_NOTE = '\n\n(Shell: run commands from the current folder; don\'t cd. Allowed: node, npm test, ls, cat, grep, find, head, tail, wc, echo.)';
 const TIMEOUT_MS = 5 * 60 * 1000;
 const ARM_NAMES = { off: 'without', on: 'with allegedly', 'on+primer': 'with allegedly + primer' };
 
