@@ -89,7 +89,52 @@ function scratchOnly(b, cwd) {
   });
 }
 
+// A fixer script Claude writes and runs (python fix.py) edits files from inside, out of sight of
+// the command. So running a script that Claude wrote or edited this turn counts as an edit when
+// the script's new text writes files. Scripts already in the project are runs, as before.
+const SCRIPT_EXT = /\.(?:py|js|mjs|cjs|ts|mts|rb|pl|sh|bash|ps1)$/i;
+const WRITES_FILES = /\b(?:writeFileSync|writeFile|appendFileSync|appendFile|write_text|write_bytes|WriteAll\w*|Set-Content|Add-Content|Out-File|File\.write|IO\.write)\b|\bopen\([^)]*,\s*(?:mode\s*=\s*)?['"][wax]|\bsed\s+-i|\bshutil\.(?:copy|move)/;
+const RUNNERS = new Set(['python', 'python3', 'py', 'node', 'ruby', 'perl', 'bash', 'sh', 'zsh', 'tsx', 'ts-node', 'bun', 'deno', 'run', 'pwsh', 'powershell', '&', '.', 'source', 'uv']);
+
+function blocksOf(e) {
+  const c = e && e.message && e.message.content;
+  return Array.isArray(c) ? c : [];
+}
+
+// Canonical paths of scripts written or edited this turn whose new text writes files.
+function fileWritingScripts(entries) {
+  const text = new Map();
+  for (const e of entries) {
+    if (!e || e.type !== 'assistant') continue;
+    for (const b of blocksOf(e)) {
+      if (!b || b.type !== 'tool_use' || !EDIT_TOOLS.has(b.name)) continue;
+      const i = b.input || {};
+      const file = i.file_path || '';
+      if (!SCRIPT_EXT.test(file)) continue;
+      const added = b.name === 'Write' ? i.content : b.name === 'MultiEdit' ? (i.edits || []).map((x) => x.new_string).join('\n') : i.new_string;
+      text.set(canon(file), `${text.get(canon(file)) || ''}\n${added || ''}`);
+    }
+  }
+  return [...text].filter(([, t]) => WRITES_FILES.test(t)).map(([f]) => f);
+}
+
+// True when a shell block runs one of `scripts`: `python fix.py`, `node -r x scripts/fix.js`, `./fix.sh`, `& .\fix.ps1`.
+function runsScript(b, scripts) {
+  if (!scripts.length || !b || b.type !== 'tool_use' || !SHELL_TOOLS.has(b.name)) return false;
+  const words = String((b.input && b.input.command) || '').split(/[\s;|()]+|&&/).map((w) => w.replace(/^['"]+|['"]+$/g, '')).filter(Boolean);
+  return words.some((w, j) => {
+    if (!SCRIPT_EXT.test(w)) return false;
+    const c = canon(w).replace(/^\.\//, '');
+    if (!scripts.some((s) => s === c || s.endsWith('/' + c))) return false;
+    if (/^\.{1,2}[\\/]/.test(w) && (j === 0 || !/^-/.test(words[j - 1]))) return true; // ./fix.sh
+    let k = j - 1;
+    while (k >= 0 && /^-/.test(words[k])) k--; // runner flags: python -u, pwsh -File
+    return k >= 0 && RUNNERS.has(path.basename(words[k]).toLowerCase().replace(/\.exe$/, ''));
+  });
+}
+
 // isCodeEdit, minus the calls in `entries` that never ran, and (given `cwd`) scratch copies.
+// Plus runs of file-writing scripts Claude wrote this turn.
 function ranCodeEdit(entries, isCodeEditFn = isCodeEdit, { cwd } = {}) {
   const notRun = new Set();
   for (const e of entries) {
@@ -97,7 +142,8 @@ function ranCodeEdit(entries, isCodeEditFn = isCodeEdit, { cwd } = {}) {
     if (!Array.isArray(c)) continue;
     for (const b of c) if (b && b.type === 'tool_result' && b.is_error && NOT_RUN.test(resultText(b))) notRun.add(b.tool_use_id);
   }
-  return (b) => isCodeEditFn(b) && !(b.id && notRun.has(b.id)) && !scratchOnly(b, cwd);
+  const scripts = fileWritingScripts(entries);
+  return (b) => (isCodeEditFn(b) || runsScript(b, scripts)) && !(b.id && notRun.has(b.id)) && !scratchOnly(b, cwd);
 }
 
-module.exports = { isCodeEdit, ranCodeEdit, editTargets, EDIT_TOOLS, NON_CODE_EXT };
+module.exports = { isCodeEdit, ranCodeEdit, editTargets, runsScript, fileWritingScripts, EDIT_TOOLS, NON_CODE_EXT };

@@ -89,7 +89,7 @@ On these 8 tasks, Claude fixed the bug in every run in every setup and never cla
 - **Nothing leaves your machine.** The hook contains no network code at all, and a test enforces that.
 - It writes one thing: an empty marker file in your temp folder (`allegedly/<session id>.blocked`) while it has sent Claude back, so it never sends Claude back twice in one turn. No transcript text goes in it.
 - At session start, a second small hook adds three lines to Claude's context explaining the receipt format (about 60 tokens). With it, Claude gets the format right the first time much more often, so fewer replies are sent back.
-- The whole hook is plain JavaScript in `hooks/`: about 1,400 lines and no dependencies. It doesn't start other programs either.
+- The whole hook is plain JavaScript in `hooks/`: about 1,550 lines and no dependencies. It doesn't start other programs either.
 
 ## Headless and CI (`claude -p`, the Agent SDK)
 
@@ -100,8 +100,8 @@ To turn allegedly off, set `ALLEGEDLY=off`. To drop only the three session-start
 ## Known limits
 
 - A receipt proves a command ran and printed that output. It doesn't prove your tests are good. allegedly does catch one common dodge: running a test for a different file than the one Claude changed. Whole-suite runs (`npm test`) are trusted as-is.
-- If Claude switches a test off during the turn (`it.skip`, `.only`, `xit`, `@pytest.mark.skip`, `#[ignore]`, `@Disabled` and similar), a passing run doesn't count as proof, and Claude is sent back to turn it on again or mark the claim allegedly. Skips already in your project, and skips you asked for in your message, are left alone. A skip added through a shell command (`sed`) isn't seen.
-- Shell edits count when the command itself shows the write: `sed -i`, `>` or `tee` into a source file, `Set-Content`, copying, moving or deleting code files, a formatter run with its write flag, and git commands that rewrite files (`checkout`, `restore`, `stash`, `reset --hard`, `pull`). A script that writes files from inside (`python fix.py`) isn't seen, so a receipt from before it can still pass. Saving output to a log (`npm test > out.log`) is not an edit, and neither is a scratch copy written to your temp folder outside the project.
+- If Claude switches a test off during the turn (`it.skip`, `.only`, `xit`, `@pytest.mark.skip`, `#[ignore]`, `@Disabled` and similar), a passing run doesn't count as proof, and Claude is sent back to turn it on again or mark the claim allegedly. This covers skips added through `sed -i` or PowerShell `-replace` too. Skips already in your project, and skips you asked for in your message, are left alone. A skip written by a script from inside isn't seen.
+- Shell edits count when the command itself shows the write: `sed -i`, `>` or `tee` into a source file, `Set-Content`, copying, moving or deleting code files, a formatter run with its write flag, and git commands that rewrite files (`checkout`, `restore`, `stash`, `reset --hard`, `pull`). Running a script Claude wrote or edited this turn (`python fix.py`) counts as an edit when the script writes files, so a receipt from before it no longer passes. A script that was already in your project and writes files from inside isn't seen. Saving output to a log (`npm test > out.log`) is not an edit, and neither is a scratch copy written to your temp folder outside the project.
 - Claim words are recognized in English, Spanish, Portuguese, French and German. In any other language, a reply after a code edit needs a 🧾 block (receipts or an allegedly line), since allegedly can't tell a claim from other talk there. The receipt checks themselves work in every language.
 - If the hook itself hits an error (a missing or unreadable transcript, bad input), it steps aside and lets Claude finish. It never blocks you because of its own bug.
 

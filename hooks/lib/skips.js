@@ -6,7 +6,7 @@
 // If the user's own message talks about skipping or disabling tests, it's what they asked for.
 
 const { looksLikeTestFile } = require('./related');
-const { ranCodeEdit } = require('./edits');
+const { ranCodeEdit, editTargets } = require('./edits');
 
 const MARKERS = [
   /\b(?:it|test|describe|context|suite|specify)\.(?:skip|only|todo)\b/g, // jest, mocha, vitest, node:test
@@ -22,6 +22,20 @@ const ASKED = /\b(?:skip|skipp(?:ed|ing)|disable|xfail|quarantine|flaky|\.only)\
 function count(text) {
   const s = String(text || '');
   return MARKERS.reduce((n, re) => n + (s.match(re) || []).length, 0);
+}
+
+// Net skip markers a shell command adds. In `sed -i 's/it(/it.skip(/'` or PowerShell
+// `-replace 'it\(', 'it.skip('`, the pattern side is text being removed, so it counts against.
+// Regex escapes (\b, \.) are dropped first so `it\.skip` reads as `it.skip`.
+function unescape(s) {
+  return String(s).replace(/\\[bBsSwWdDnrt]/g, ' ').replace(/\\(.)/g, '$1');
+}
+function shellSkipDelta(command) {
+  const cmd = String(command || '');
+  let d = count(unescape(cmd));
+  for (const m of cmd.matchAll(/(?:^|[\s'"])s([/|#,])((?:\\.|(?!\1)[^\\])*)\1/g)) d -= 2 * count(unescape(m[2]));
+  for (const m of cmd.matchAll(/-replace\s+(['"])((?:(?!\1).)*)\1/gi)) d -= 2 * count(unescape(m[2]));
+  return d;
 }
 
 function blocks(e) {
@@ -52,6 +66,11 @@ function addedSkips(entries, request = '') {
     for (const b of blocks(e)) {
       if (!ran(b)) continue;
       const i = b.input || {};
+      if (b.name === 'Bash' || b.name === 'PowerShell') {
+        const d = shellSkipDelta(i.command);
+        if (d) for (const f of editTargets(b)) if (looksLikeTestFile(f) || /\.rs$/.test(f)) net.set(f, (net.get(f) || 0) + d);
+        continue;
+      }
       const file = i.file_path || '';
       if (!file || !looksLikeTestFile(file) && !/\.rs$/.test(file)) continue;
       let d = 0;
@@ -70,4 +89,4 @@ function addedSkips(entries, request = '') {
   return [...net].filter(([, n]) => n > 0).map(([f]) => f);
 }
 
-module.exports = { addedSkips, humanText, count };
+module.exports = { addedSkips, humanText, count, shellSkipDelta };
