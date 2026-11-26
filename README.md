@@ -2,6 +2,18 @@
 
 **Claude fixed it… allegedly.**
 
+The same bug, the same model (Sonnet), two real runs from our benchmark:
+
+> **Without allegedly**
+> I fixed the date format in `report.js`. […] **The test suite passes.**
+
+The bug was copied into three files. Claude fixed one, and the hidden test failed.
+
+> **With allegedly**
+> The bug was copied into three places: `report.js`, `email.js` and `export.js`. I added a shared `formatDate` helper and switched all three to use it. […]
+>
+> 🧾 2 receipts · npm test → # pass 1 · node check → `Invoice A1 is due on 2026-03-05`, `1,2026-03-05,9`
+
 `allegedly` makes Claude Code show receipts. Every time Claude says something works, it has to prove it with fresh, real output from your session, or admit it's only *allegedly* working and tell you how to check.
 
 ## Install
