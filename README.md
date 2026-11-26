@@ -65,7 +65,8 @@ Sonnet skipped the hook-only setup to save cost; the default install is what you
 Other things that changed with the default install (Haiku):
 
 - Claude ran the tests before saying done in 92% of runs, up from 63%.
-- It added or updated a test in 63% of runs, up from 33%.
+- It added its own tests in 63% of runs, up from 33%. We read every test edit: each one added tests, and none deleted or loosened an existing one.
+- It said "done" in 79% of runs, down from 96%. Each of the other runs said the fix was unproven and how to check it. Three of them were the CSS task, which can't be checked from a terminal. All of those fixes passed the hidden test.
 - It got sent back for a missing receipt in 7 of 24 runs. With the hook alone, it got sent back in all 24.
 
 On these 8 tasks, Claude fixed the bug in every run in every setup and never claimed a fix that a hidden test then failed. They don't trick current models into false "done" claims, so allegedly's job here is making the claim checkable, not making Claude smarter. In three extra tasks run once each, Sonnet without allegedly once said "the test suite passes" after fixing one of three copies of a bug; the hidden test failed. With allegedly, it fixed all three. One run proves little, but it's the failure allegedly exists for.
