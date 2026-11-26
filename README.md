@@ -25,7 +25,7 @@ The bug was copied into three files. Claude fixed one, and the hidden test faile
 /plugin install allegedly@allegedly
 ```
 
-Enforcement needs **Node 18+** (`node --version`). Without Node, the skill still works but nothing enforces it.
+Enforcement needs **Node 22+** (`node --version`). Without Node, the skill still works but nothing enforces it.
 
 ![Install allegedly, then Claude fixes a bug and ends with a receipt](docs/demo.gif)
 
