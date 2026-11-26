@@ -1,6 +1,6 @@
 {
   "name": "allegedly",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Claude can't say 'done' without receipts. Every success claim gets fresh proof or is marked allegedly.",
   "author": { "name": "rau1b" },
   "license": "MIT",
