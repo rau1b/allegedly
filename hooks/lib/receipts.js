@@ -10,6 +10,7 @@
 //   weak   - the output came only from reading or listing files (ls, cat, Read), not a run
 
 const { touchesEdited } = require('./related');
+const { editTargets, ranCodeEdit, isCodeEdit: writesCode } = require('./edits');
 
 const MIN_OUTPUT_CHARS = 3; // "ok" alone proves too little to match on
 
@@ -225,7 +226,8 @@ function describeSource(toolUse) {
   if (!toolUse) return { kind: 'run', command: null }; // unknown origin: don't punish it
   if (READ_TOOLS.has(toolUse.name)) return { kind: 'read', command: null };
   const command = shellCommand(toolUse);
-  if (command && isReadOnlyCommand(command)) return { kind: 'read', command };
+  // sed -i and cat > a.js use display commands but write code: not a read.
+  if (command && isReadOnlyCommand(command) && !writesCode(toolUse)) return { kind: 'read', command };
   return { kind: 'run', command };
 }
 
@@ -333,18 +335,18 @@ function editedFiles(entries, isCodeEdit) {
   for (const e of entries) {
     if (e.type !== 'assistant') continue;
     for (const b of blocks(e)) {
-      if (isCodeEdit(b)) files.add((b.input && (b.input.file_path || b.input.notebook_path)) || '');
+      if (isCodeEdit(b)) for (const f of editTargets(b)) files.add(f);
     }
   }
-  files.delete('');
   return [...files];
 }
 
 // Returns the receipts that fail, each with a `why`:
 // 'no-output', 'no-match', 'forged', 'weak' or 'unrelated' (with `edited`, the files it should touch).
-function checkReceipts(text, entries, isCodeEdit, { cwd } = {}) {
+function checkReceipts(text, entries, isCodeEditFn, { cwd } = {}) {
   const receipts = parseReceipts(text);
   if (receipts.length === 0) return [];
+  const isCodeEdit = ranCodeEdit(entries, isCodeEditFn); // a denied edit changed nothing
   const results = freshResults(entries, isCodeEdit);
   const edited = editedFiles(entries, isCodeEdit);
   const bad = [];

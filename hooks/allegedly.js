@@ -8,7 +8,7 @@ const { readRecentEntries } = require('./lib/transcript');
 const { findClaims, hasReceiptsBlock } = require('./lib/claims');
 const { checkReceipts } = require('./lib/receipts');
 const { weBlocked, markBlocked, clearBlocked } = require('./lib/state');
-const { isCodeEdit } = require('./lib/edits');
+const { isCodeEdit, ranCodeEdit } = require('./lib/edits');
 
 // Includes the format: the skill may not have loaded, so this can be Claude's only instruction.
 // The allegedly form is spelled out too: told only "or mark it allegedly", Haiku invented
@@ -67,9 +67,10 @@ function finalAssistantText(entries) {
     .join('\n');
 }
 
-// True if Claude edited a code file this turn.
+// True if Claude edited a code file this turn (an edit tool or a shell command that writes code).
 function editedCodeThisTurn(entries) {
-  return entries.some((e) => e.type === 'assistant' && blocks(e).some(isCodeEdit));
+  const ran = ranCodeEdit(entries);
+  return entries.some((e) => e.type === 'assistant' && blocks(e).some(ran));
 }
 
 // ALLEGEDLY=off (also 0, false, no; any case) turns the hook off, e.g. in CI.

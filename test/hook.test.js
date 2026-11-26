@@ -82,6 +82,53 @@ test('docs edit after the run does not make the receipt stale', () => {
   assert.strictEqual(r.out, null);
 });
 
+const shell = (command, id) => ({
+  type: 'assistant',
+  message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] },
+});
+const shellResult = (id, out, isError = false) => ({
+  type: 'user',
+  message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: out }] },
+});
+const PASS_RECEIPT = 'Fixed it.\n\n🧾 1 receipt · npm test → # pass 14';
+
+test('shell edit after the run (sed -i) makes the receipt stale', () => {
+  const r = runHook([
+    human('fix it'),
+    edit('src/app.js'),
+    result('# pass 14'),
+    shell("sed -i 's/floor/round/' src/app.js", 's1'),
+    shellResult('s1', ''),
+    say(PASS_RECEIPT),
+  ]);
+  assert.strictEqual(r.out.decision, 'block');
+  assert.match(r.out.reason, /since your last code edit/);
+});
+
+test('a denied shell edit changed nothing: receipt stays fresh', () => {
+  const r = runHook([
+    human('fix it'),
+    edit('src/app.js'),
+    result('# pass 14'),
+    shell("cat > scratch/app.js <<'EOF'\nold code\nEOF", 's1'),
+    shellResult('s1', "Permission to use Bash has been denied because Claude Code is running in don't ask mode.", true),
+    say(PASS_RECEIPT),
+  ]);
+  assert.strictEqual(r.out, null);
+});
+
+test('a run that saves its output to a log is not an edit', () => {
+  const r = runHook([
+    human('fix it'),
+    edit('src/app.js'),
+    result('# pass 14'),
+    shell('node scripts/report.js > report.log 2>&1', 's1'),
+    shellResult('s1', ''),
+    say(PASS_RECEIPT),
+  ]);
+  assert.strictEqual(r.out, null);
+});
+
 test('bad receipt on the second try: lets Claude finish, tells the user', () => {
   const r = runHook([human('x'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')], { stop_hook_active: true });
   assert.strictEqual(r.out.decision, undefined);
