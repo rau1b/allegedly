@@ -38,7 +38,7 @@ test('claim without receipts: sent back once', () => {
 });
 
 test('second miss: lets Claude finish but tells the user', () => {
-  const r = runHook([human('fix it'), say('Fixed the login bug.')], { stop_hook_active: true });
+  const r = runHook([human('fix it'), edit('src/app.js'), result('ok'), say('Fixed the login bug.')], { stop_hook_active: true });
   assert.strictEqual(r.out.decision, undefined);
   assert.match(r.out.systemMessage, /skipped receipts/);
 });
@@ -145,7 +145,7 @@ test('tests switched off this turn: a passing receipt is sent back, file named',
 });
 
 test('bad receipt on the second try: lets Claude finish, tells the user', () => {
-  const r = runHook([human('x'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')], { stop_hook_active: true });
+  const r = runHook([human('x'), edit('src/a.js'), result('ok'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')], { stop_hook_active: true });
   assert.strictEqual(r.out.decision, undefined);
   assert.match(r.out.systemMessage, /didn't check out/);
 });
@@ -156,9 +156,29 @@ test('all-allegedly block: silent', () => {
 });
 
 test('bad-receipt message stays under 40 words plus the claim', () => {
-  const r = runHook([human('x'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')]);
+  const r = runHook([human('x'), edit('src/a.js'), result('ok'), say('Fixed.\n\n🧾 1 receipt · npm test → 99 passed')]);
   const words = r.out.reason.replace(/"[^"]*"/, '').split(/\s+/).length;
   assert.ok(words < 40, `got ${words} words`);
+});
+
+// s22: the user's own sessions (slide decks, PDFs, research) were blocked ~35 times on honest
+// work. allegedly is about code Claude changed, so a turn with no code edit is never checked.
+test('no code edited this turn: silent, even with a claim or a receipt that would fail', () => {
+  assert.strictEqual(runHook([human('x'), say('Fixed the folder mix-up. All tests pass.')]).out, null);
+  assert.strictEqual(runHook([human('x'), say('Done.\n\n🧾 1 receipt · npm test → 99 passed')]).out, null);
+  assert.strictEqual(runHook([human('x'), edit('notes/plan.md'), result('ok'), say('Fixed the plan.')]).out, null);
+  const sh = (id, command) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } });
+  for (const command of ['cp build/deck.pptx ~/Desktop/', 'cp out/report.xlsx out/report.docx final/', 'mkdir -p backup && cp final/* backup/']) {
+    assert.strictEqual(runHook([human('x'), sh('c', command), result('ok'), say('Fixed slide 3.')]).out, null, command);
+  }
+});
+
+test('a send-back still owes its block on the retry, even with no code edit seen', () => {
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), 'allegedly-owed-'));
+  const first = runHook([human('x'), edit('src/a.js'), result('ok'), say('Fixed it.')], { session_id: 's1' }, state);
+  assert.strictEqual(first.out.decision, 'block');
+  const retry = runHook([human('x'), say('The change is confirmed.')], { session_id: 's1', stop_hook_active: true }, state);
+  assert.match(retry.out.systemMessage, /skipped receipts/);
 });
 
 test('no claim: silent', () => {
@@ -172,7 +192,7 @@ test('dodge after a code edit is caught; after a docs-only edit it is not', () =
 });
 
 test('prefers last_assistant_message when Claude Code provides it', () => {
-  const r = runHook([human('x'), say('old text')], { last_assistant_message: 'All tests pass now.' });
+  const r = runHook([human('x'), edit('src/a.js'), result('ok'), say('old text')], { last_assistant_message: 'All tests pass now.' });
   assert.strictEqual(r.out.decision, 'block');
 });
 

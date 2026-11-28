@@ -56,8 +56,8 @@ function splitReceipt(receipt) {
   const i = receipt.indexOf('→');
   if (i === -1) return { command: receipt.trim(), output: '' };
   const raw = receipt.slice(i + 1).trim();
-  // Claude sometimes wraps the output in backticks; drop them.
-  const output = raw.replace(/^`+|`+$/g, '').trim();
+  // Claude sometimes wraps the output in backticks or quotes; drop them.
+  const output = raw.replace(/^`+|`+$/g, '').replace(/^["“](.*)["”]$/s, '$1').trim();
   // Seen in every benchmark run: several quoted fragments joined by ", " or " / " or " · ".
   return { command: receipt.slice(0, i).trim(), output, quoted: quotedSpans(raw) };
 }
@@ -84,7 +84,12 @@ function quotedSpans(raw) {
     } else if (c === '(') depth++;
     else if (c === ')' && depth > 0) depth--;
   }
-  return outside.length ? outside : all;
+  if (all.length) return outside.length ? outside : all;
+  // No backticks: "double-quoted" text is the quote instead. Seen live (leadscout, s22):
+  // `gh pr merge 10` → "MERGED b1bf7a8", and → "66 passed" … "0 failed" with notes between.
+  // Quotes inside a (prose aside) don't count, so `14 passed (the "auth" suite)` is checked whole.
+  const prose = raw.replace(/\([^()]*\)/g, ' ');
+  return [...prose.matchAll(/"([^"\n]+)"|“([^”\n]+)”/g)].map((m) => m[1] || m[2]);
 }
 
 // One compact line can hold several receipts: "a → x · b → y". A " · " part with no arrow
@@ -92,13 +97,37 @@ function quotedSpans(raw) {
 // everything after it is not a receipt.
 function splitCompact(body) {
   const groups = [];
-  for (const part of body.split(/\s+·\s+/)) {
+  for (const part of body.split(/\s+·\s+/).flatMap(splitJoined)) {
     if (/^allegedly\b/i.test(part.trim())) break;
     const last = groups[groups.length - 1];
     if (last === undefined || (part.includes('→') && last.includes('→'))) groups.push(part);
     else groups[groups.length - 1] = `${last} · ${part}`;
   }
   return groups;
+}
+
+// Two receipts joined with "; " or ", " instead of " · ": "`pytest -q` → `69 passed`; `ruff check` → `All
+// checks passed!`" (seen live, leadscout, s22). Splits only where the next piece has its own arrow
+// and only outside backticks, so "69 passed, 1 warning" stays whole.
+function splitJoined(part) {
+  if ((part.match(/→/g) || []).length < 2) return [part];
+  const out = [];
+  let start = 0;
+  let ticks = 0;
+  for (let i = 0; i < part.length; i++) {
+    const c = part[i];
+    if (c === '`') ticks++;
+    if (ticks % 2 || (c !== ';' && c !== ',') || !/\s/.test(part[i + 1] || '')) continue;
+    const rest = part.slice(i + 1);
+    const nextStop = rest.search(/[;,]\s/);
+    const arrow = rest.indexOf('→');
+    if (arrow === -1 || (nextStop !== -1 && nextStop < arrow)) continue;
+    if (!part.slice(start, i).includes('→')) continue; // the piece before needs its own arrow too
+    out.push(part.slice(start, i).trim());
+    start = i + 1;
+  }
+  out.push(part.slice(start).trim());
+  return out.filter(Boolean);
 }
 
 // A header line alone, with the receipts as a list below it: "🧾 2 receipts" then "- npm test → …".
@@ -303,7 +332,8 @@ function freshResults(entries, isCodeEdit) {
         if (out[1].index < start) continue; // the run came before the last edit: stale, whenever it was read
         toolUse = out[1].toolUse;
       }
-      results.push({ toolUseId: b.tool_use_id, text: normalize(resultText(b)), source: describeSource(toolUse) });
+      const raw = resultText(b);
+      results.push({ toolUseId: b.tool_use_id, text: normalize(raw), lines: raw.split('\n').map(normalize).filter(Boolean), source: describeSource(toolUse) });
     }
   });
   return results;
@@ -318,6 +348,15 @@ function pieces(receipt) {
   const quoted = receipt.quoted && receipt.quoted.length;
   const spans = quoted ? receipt.quoted : receipt.output.split(JOINERS);
   return spans.flatMap((t) => t.split(ELLIPSIS)).map(normalize).filter(Boolean);
+}
+
+// Does the receipt's quote appear in this result? Backticked spans may come in any order, since
+// Claude often quotes a summary line before the detail above it (seen live, leadscout, s22);
+// each span must still be there whole, with its own `…` pieces in order. Unquoted joined lines
+// keep their order.
+function receiptIn(receipt, parts, haystack) {
+  if (!(receipt.quoted && receipt.quoted.length)) return matchesIn(parts, haystack);
+  return receipt.quoted.every((span) => matchesIn(span.split(ELLIPSIS).map(normalize).filter(Boolean), haystack));
 }
 
 function matchesIn(parts, haystack) {
@@ -381,11 +420,38 @@ function countsMatch(claim, text) {
 // its own labels, console.log('time kept:', check()), isn't forged by the label alone: the
 // values next to it were computed (benchmark 04, s10).
 function isForged(parts, source, counts) {
-  if (!source.command || !PRINTERS.test(source.command)) return false;
-  const command = normalize(source.command);
+  if (!source.command) return false;
+  const command = normalize(withoutExitEcho(source.command));
+  if (!PRINTERS.test(command)) return false;
   if (counts && countsMatch(counts, command)) return true;
   const typed = parts.filter((p) => typedIn(command, p));
   return typed.length > 0 && (typed.length === parts.length || typed.some((p) => /\d/.test(p)));
+}
+
+// `node --check app.js && echo syntax ok` prints only if the check passed, so the echo reports a
+// real exit code (seen live, s22). Dropped before the forged check when the run before && is a
+// real command and the echo is a short status (3 words at most, no digits, no "test"):
+// `&& echo "14 passed"` and `&& echo all tests pass` still count as typed.
+// Splits on the separators and keeps them, so the check stays linear on long commands.
+const EXIT_ECHO = /^\s*(?:echo|printf|write-output|write-host)\s+(['"]?)([^'"]*)\1\s*$/i;
+function withoutExitEcho(command) {
+  const parts = String(command).split(/(&&|\|\||[;|\n])/);
+  const kept = [];
+  for (let i = 0; i < parts.length; i++) {
+    const echo = parts[i - 1] === '&&' && i >= 2 && parts[i].match(EXIT_ECHO);
+    if (echo) {
+      const before = parts[i - 2];
+      const word = before.trim().split(/\s+/)[0].toLowerCase();
+      const said = echo[2];
+      const status = said.trim().split(/\s+/).length <= 3 && !/\d|\btests?\b/i.test(said);
+      if (before.trim() && status && !/^(?:echo|printf|true|:|cat|type)$/.test(word) && !PRINTERS.test(before)) {
+        kept.pop(); // the && before the echo
+        continue;
+      }
+    }
+    kept.push(parts[i]);
+  }
+  return kept.join('');
 }
 
 const PRINTER_CALL = /(?:^|[^\w.])(?:console\.log|print|puts|printf|write-output|write-host|echo)$/;
@@ -446,11 +512,13 @@ function checkReceipts(text, entries, isCodeEditFn, { cwd, request } = {}) {
   const bad = [];
   for (const r of receipts) {
     const parts = pieces(r);
-    // Short output ("4") only counts when it is a run's whole output, never a piece of a longer one.
-    // Seen live: `node -e "...average([2,4,6])"` → 4 is an honest receipt.
+    // Short output ("4") only counts as a whole line of a run's output, never part of a longer line.
+    // Seen live: `node -e "...average([2,4,6])"` → 4, and `git rev-list --count a..b` → 1 from a
+    // command that printed more lines after it (s22: that one made the user switch allegedly off).
     const short = parts.join('').replace(/\s/g, '').length < MIN_OUTPUT_CHARS;
     const whole = parts.join(' ');
-    let hits = results.filter((res) => (short ? whole !== '' && res.text === whole : matchesIn(parts, res.text)));
+    const shortHit = (res) => whole !== '' && (res.text === whole || (res.lines || []).includes(whole));
+    let hits = results.filter((res) => (short ? shortHit(res) : receiptIn(r, parts, res.text)));
     if (short && hits.length === 0) {
       bad.push({ ...r, why: 'no-output' });
       continue;

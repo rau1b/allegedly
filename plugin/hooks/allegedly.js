@@ -95,6 +95,14 @@ async function main() {
   const { entries, human } = readRecentEntries(input.transcript_path);
   const text = typeof input.last_assistant_message === 'string' ? input.last_assistant_message : finalAssistantText(entries);
 
+  // allegedly checks claims about code Claude changed. A turn that edited no code (research, a
+  // slide deck, copying a finished PDF) is left alone, receipts or not: s22 found ~35 blocks in
+  // the user's own non-code sessions, nearly all on honest work. Once we sent Claude back, the
+  // reply still owes its block.
+  const owed = input.stop_hook_active && weBlocked(input.session_id) === true;
+  const editedCode = editedCodeThisTurn(entries, input.cwd);
+  if (!editedCode && !owed) return;
+
   let reason, notice;
   if (hasReceiptsBlock(text)) {
     // A block is there: every `verified` receipt must quote fresh output.
@@ -105,8 +113,7 @@ async function main() {
   } else {
     // Once we sent Claude back, the claim is already on record: the reply owes a block
     // even if it avoids claim words this time ("the fix is confirmed", seen in a live run).
-    const owed = input.stop_hook_active && weBlocked(input.session_id) === true;
-    const claims = findClaims(text, { editedCode: editedCodeThisTurn(entries, input.cwd) });
+    const claims = findClaims(text, { editedCode });
     if (claims.length === 0 && !owed) return;
     reason = MSG_NO_BLOCK;
     notice = MSG_SECOND_MISS;

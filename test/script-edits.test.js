@@ -78,3 +78,41 @@ test('a receipt from before the fixer script ran is stale; one after it passes',
   const after = [...entries, bash('npm test', 't2'), result('t2', '# pass 9\n# fail 0')];
   assert.strictEqual(checkReceipts(text, after, isCodeEdit).length, 0);
 });
+
+// s22: build_deck.py saving deck.pptx makes a deliverable, not code (dsmm-ppt and stats sessions).
+test('a script that only writes office, data or media files is not a code edit', () => {
+  const deck = tool('Write', { file_path: 'C:/s/build_deck.py', content: "prs.save('deck.pptx')\nopen('notes.csv', 'w').write(x)" }, 'w1');
+  const run = bash('python C:/s/build_deck.py', 'r1');
+  assert.strictEqual(ranCodeEdit([deck, run])(run.message.content[0]), false);
+  const gen = tool('Write', { file_path: 'C:/s/gen.py', content: "open('src/routes.py', 'w').write(code)" }, 'w2');
+  const run2 = bash('python C:/s/gen.py', 'r2');
+  assert.strictEqual(ranCodeEdit([gen, run2])(run2.message.content[0]), true);
+});
+
+// s22: scratch files written with a leading cd or a $VAR path are scratch, not project edits.
+test('scratch edits placed by a leading cd or a variable do not count; project ones still do', () => {
+  const os = require('os');
+  const tmp = os.tmpdir().split('\\').join('/');
+  const cwd = 'C:/work/proj';
+  const edit = (command) => {
+    const b = bash(command, 'x');
+    return ranCodeEdit([b], isCodeEdit, { cwd })(b.message.content[0]);
+  };
+  assert.strictEqual(edit(`cd "${tmp}/scratch/build" && sed -i 's/a/b/' pdf.py && python pdf.py`), false);
+  assert.strictEqual(edit(`S="${tmp}/scratch/shots"; printf '<p>hi</p>' > "$S/page.html"`), false);
+  assert.strictEqual(edit(`cd "${cwd}" && sed -i 's/a/b/' src/app.py`), true);
+  assert.strictEqual(edit(`sed -i 's/a/b/' "$UNSET/app.py"`), true);
+});
+
+test('s22: ../ out of the scratch folder, or a variable set twice, is still a project edit', () => {
+  const os = require('os');
+  const tmp = os.tmpdir().split(String.fromCharCode(92)).join('/');
+  const cwd = 'C:/work/proj';
+  const edit = (command) => {
+    const b = bash(command, 'x');
+    return ranCodeEdit([b], isCodeEdit, { cwd })(b.message.content[0]);
+  };
+  assert.strictEqual(edit(`cd "${tmp}/scratch" && sed -i 's/a/b/' ../../../../../../work/proj/src/app.py`), true);
+  assert.strictEqual(edit(`sed -i 's/a/b/' "${tmp}/scratch/../../../../../../work/proj/app.py"`), true);
+  assert.strictEqual(edit(`S="${tmp}/s"; S="C:/work/proj"; sed -i 's/a/b/' "$S/app.py"`), true);
+});

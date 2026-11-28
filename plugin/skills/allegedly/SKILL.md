@@ -5,7 +5,7 @@ description: Use whenever you are about to tell the user that something works, i
 
 # allegedly
 
-Whenever your reply says your work succeeded ("fixed", "works", "tests pass", "done", "should be working now", even hedged), end the reply with a receipts block. Plain answers, explanations, questions and plans get no block.
+Whenever your reply says code you changed this turn works ("fixed", "works", "tests pass", "done", "should be working now", even hedged), end the reply with a receipts block. Plain answers, explanations, questions and plans get no block, and neither do turns where you changed no code (research, documents, slide decks, copying files).
 
 ## Rules
 
@@ -38,7 +38,9 @@ Two or more claims, a table:
 ```
 
 - Use words, not icons. 🧾 is the only emoji. No ✅, ⚠️ or similar.
-- Keep the claim to a few words. Write the receipt as `command → key output line`.
+- Keep the claim to a few words. Write the receipt as `command → key output line`, with the output copied character for character. Put notes in (parentheses) or after the block, never in the quoted output.
+- Several receipts on one line are separated by ` · `: `🧾 2 receipts · pytest -q → 69 passed · ruff check → All checks passed!`
+- What you checked by looking (a screenshot, a rendered slide, a page in a browser) is not a receipt, because there's no output to quote. Put it in an allegedly line with the check for the user.
 - The footer is always exactly `🧾 N receipts · M allegedly`. Use the singular "receipt" when N is 1.
 
 ## When the terminal can't prove it

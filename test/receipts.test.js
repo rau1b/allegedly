@@ -65,10 +65,13 @@ for (const receipt of [
   });
 }
 
-test('backticked fragments must still all be real, and in order', () => {
+// s22: order no longer matters for backticked spans (Claude quoted a summary before its detail,
+// leadscout), but every span must still be real and in the same result.
+test('backticked fragments must still all be real, in any order', () => {
   const entries = [editE, res(TAP)];
   assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# pass 3`, `# fail 1`', entries, isCodeEdit)[0].why, 'no-match');
-  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# tests 3`, `ok 1 - slugify`', entries, isCodeEdit)[0].why, 'no-match');
+  assert.deepStrictEqual(checkReceipts('🧾 1 receipt · npm test → `# tests 3`, `ok 1 - slugify`', entries, isCodeEdit), []);
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `# tests 3`, `ok 9 - made up`', entries, isCodeEdit)[0].why, 'no-match');
   // Count spans alone are count phrases (decision 11): their order doesn't matter, their numbers do.
   assert.deepStrictEqual(checkReceipts('🧾 1 receipt · npm test → `# fail 0`, `# pass 3`', entries, isCodeEdit), []);
 });
@@ -386,4 +389,56 @@ test('unquoted output lines joined with " / ", " | " or "; " match in order (Son
   assert.deepStrictEqual(checkReceipts(r, [editE, res('Invoice 7 is due on 2026-03-05\n1,2026-03-05,9\n')], isCodeEdit), []);
   assert.strictEqual(checkReceipts(r, [editE, res('1,2026-03-05,9\nInvoice 7 is due on 2026-03-05\n')], isCodeEdit)[0].why, 'no-match');
   assert.strictEqual(checkReceipts(r, [editE, res('Invoice 7 is due on 2026-03-05\n')], isCodeEdit)[0].why, 'no-match');
+});
+
+// s22: replaying the user's own blocked sessions. Each test is a made-up copy of a real false alarm.
+const tu22 = (id, command) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } });
+const out22 = (id, content) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+
+test('s22: a short output matches a whole line of a longer run, never part of a line', () => {
+  const entries = [editE, tu22('g', 'git rev-list --count a1..b2; git diff --stat'), out22('g', '1\n 3 files changed, 4 insertions(+)\n')];
+  assert.deepStrictEqual(checkReceipts('🧾 1 receipt · git rev-list --count a1..b2 → 1', entries, isCodeEdit), []);
+  const partial = [editE, tu22('g', 'npm test'), out22('g', '# pass 14\n# fail 0\n')];
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → 1', partial, isCodeEdit)[0].why, 'no-output');
+});
+
+test('s22: two receipts joined with "; " are split, and "69 passed, 1 warning" stays whole', () => {
+  const r = parseReceipts('🧾 2 receipts · `pytest -q` → `69 passed, 1 warning in 3.1s`; `ruff check src` → `All checks passed!`');
+  assert.deepStrictEqual(r.map((x) => [x.command, x.output]), [
+    ['`pytest -q`', '69 passed, 1 warning in 3.1s'],
+    ['`ruff check src`', 'All checks passed!'],
+  ]);
+  const entries = [editE, tu22('p', 'pytest -q && ruff check src'), out22('p', '....\n69 passed, 1 warning in 3.1s\nAll checks passed!\n')];
+  assert.deepStrictEqual(checkReceipts('🧾 2 receipts · `pytest -q` → `69 passed, 1 warning in 3.1s`; `ruff check src` → `All checks passed!`', entries, isCodeEdit), []);
+});
+
+test('s22: "double-quoted" output is the quote when there are no backticks', () => {
+  const entries = [editE, tu22('m', 'gh pr merge 10 --merge && gh pr view 10 --json state'), out22('m', 'MERGED b1bf7a8\n')];
+  assert.deepStrictEqual(checkReceipts('🧾 1 receipt · `gh pr view 10` → "MERGED b1bf7a8"', entries, isCodeEdit), []);
+  const notes = [editE, tu22('t', 'pytest -q'), out22('t', '66 passed in 2.1s\n0 failed\n')];
+  assert.deepStrictEqual(checkReceipts('🧾 1 receipt · pytest → "66 passed" and then "0 failed" at the end', notes, isCodeEdit), []);
+});
+
+test('s22: `&& echo ok` after a real check reports its exit code; `&& echo "14 passed"` is still typed', () => {
+  const ok = [editE, tu22('c', 'node --check app.js && node --check data.js && echo syntax ok'), out22('c', 'syntax ok\n')];
+  assert.deepStrictEqual(checkReceipts('🧾 1 receipt · `node --check app.js` → `syntax ok`', ok, isCodeEdit), []);
+  const typed = [editE, tu22('c', 'node --check app.js && echo "14 passed"'), out22('c', '14 passed\n')];
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `14 passed`', typed, isCodeEdit)[0].why, 'forged');
+  const claim = [editE, tu22('c', 'node src/a.js && echo all tests pass'), out22('c', 'all tests pass\n')];
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → `all tests pass`', claim, isCodeEdit)[0].why, 'forged');
+  const bare = [editE, tu22('c', 'echo syntax ok'), out22('c', 'syntax ok\n')];
+  assert.notDeepStrictEqual(checkReceipts('🧾 1 receipt · check → `syntax ok`', bare, isCodeEdit), []);
+});
+
+test('s22: a "quote" inside a (prose aside) does not shrink the receipt to that word', () => {
+  const entries = [editE, tu22('t', 'npm test'), out22('t', 'auth\n# pass 3\n')];
+  assert.strictEqual(checkReceipts('🧾 1 receipt · npm test → 14 passed (the "auth" suite)', entries, isCodeEdit)[0].why, 'no-match');
+});
+
+test('s22: a very long one-line command is checked quickly', () => {
+  const long = 'node -e "' + 'x'.repeat(200000) + '"';
+  const entries = [editE, tu22('l', long), out22('l', 'done fine\n')];
+  const t = Date.now();
+  checkReceipts('🧾 1 receipt · node → `done fine`', entries, isCodeEdit);
+  assert.ok(Date.now() - t < 1000, `took ${Date.now() - t} ms`);
 });
